@@ -124,7 +124,6 @@ exports.addUser = catchAsync(async (req, res, next) => {
 				return { user_id: newUser.id, station_id: station.id };
 			});
 
-			console.log(`userStationsArr`, userStationsArr);
 			await PermissionModel.bulkCreate(permissions, { transaction });
 			await UserStationModel.bulkCreate(userStationsArr, { transaction });
 

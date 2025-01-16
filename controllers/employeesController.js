@@ -39,7 +39,6 @@ exports.getEmployeesByStationId = catchAsync(async (req, res, next) => {
 	}
 });
 exports.addEmployee = catchAsync(async (req, res, next) => {
-	console.log(`foo`, req.body.price);
 	try {
 		const employee = await EmployeeModel.create({
 			name: req.body.name,

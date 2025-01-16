@@ -59,9 +59,6 @@ exports.addStation = catchAsync(async (req, res, next) => {
 				{ transaction: t }
 			);
 
-			// console.log(`req.body.tanks`, req.body.tanks);
-			// console.log(`req.body.dispensers`, req.body.dispensers);
-			// console.log(`req.body.stores`, req.body.stores);
 			const shiftsArr = req.body.shifts.map((el) => {
 				return {
 					start: el.start,
@@ -74,11 +71,13 @@ exports.addStation = catchAsync(async (req, res, next) => {
 			const shifts = await ShiftModel.bulkCreate(shiftsArr, { transaction: t });
 			const highestShift = Math.max(...shifts.map((obj) => obj.number));
 			const startDate = new Date(req.body.date);
+			const previousDay = new Date(startDate);
+			previousDay.setDate(startDate.getDate() - 1);
 			const year = startDate.getFullYear().toString().slice(-2);
 			const movment = await MovmentModel.create(
 				{
 					station_id: station.id,
-					date: startDate,
+					date: previousDay,
 					number: `${station.number.toString().padStart(2, "0")}${year}0000`,
 					state: "approved",
 					shifts: req.body.shifts.length,
@@ -212,7 +211,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 			await IncomeModel.bulkCreate(incomesArr, {
 				transaction: t,
 			});
-			console.log(`test`);
+
 			const storesMovmentsArr = [];
 			stores.forEach((store) => {
 				storesMovmentsArr.push({

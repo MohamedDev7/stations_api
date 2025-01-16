@@ -119,6 +119,7 @@ exports.getStationMovment = catchAsync(async (req, res, next) => {
 exports.getStationMovmentByDate = catchAsync(async (req, res, next) => {
 	try {
 		await sequelize.transaction(async (t) => {
+			console.log(`req.params`, req.params);
 			const movment = await MovmentModel.findOne({
 				where: {
 					station_id: +req.params.id,
@@ -401,6 +402,17 @@ exports.deleteMovment = catchAsync(async (req, res, next) => {
 });
 exports.changeMovmentState = catchAsync(async (req, res, next) => {
 	try {
+		if (req.body.state === "pending") {
+			//check pending movment
+			const checkPendingMovment = await MovmentModel.findOne({
+				where: { station_id: req.body.station_id, state: "pending" },
+				order: [["createdAt", "DESC"]],
+			});
+			if (checkPendingMovment) {
+				return next(new AppError("لا يمكن فتح أكثر من حركة بنفس الوقت", 500));
+			}
+		}
+
 		await MovmentModel.update(
 			{ state: req.body.state },
 			{ where: { id: +req.params.id } }
@@ -469,7 +481,6 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				],
 				transaction: t,
 			});
-
 			//find last data
 			if (movment.shifts > 1) {
 				const dispensersMovments2 = await DispenserMovmentModel.findAll({
@@ -507,7 +518,7 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 					const data = storesMovments1.filter(
 						(ele) => ele.store_id === el.store_id
 					)[0];
-					console.log(`data`, data);
+
 					return {
 						id: el.id,
 						store_id: el.store_id,
@@ -524,11 +535,14 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				storesMovment = storesMovments1.map((el) => {
 					return {
 						id: el.id,
+						store_id: el.store_id,
 						prev_value: el.prev_value,
 						curr_value: el.curr_value,
 						name: el.store.name,
 						substance: el.store.substance.name,
 						substance_id: el.store.substance.id,
+						type: el.store.type,
+						price: el.price,
 					};
 				});
 				dispensersMovment = dispensersMovments1.map((el) => {
@@ -545,6 +559,43 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				});
 			}
 			const incomes = await IncomeModel.findAll({
+				where: {
+					movment_id: req.params.id,
+				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: ["name"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["name"],
+							},
+						],
+					},
+				],
+				transaction: t,
+			});
+
+			const calibrations = await calibrationModel.findAll({
+				where: {
+					movment_id: req.params.id,
+				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: ["name"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["name"],
+							},
+						],
+					},
+				],
+				transaction: t,
+			});
+			const surplus = await SurplusModel.findAll({
 				where: {
 					movment_id: req.params.id,
 				},
@@ -580,13 +631,33 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				],
 				transaction: t,
 			});
-
+			const coupons = await BranchWithdrawalsModel.findAll({
+				where: {
+					movment_id: req.params.id,
+				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: ["name"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["name"],
+							},
+						],
+					},
+				],
+				transaction: t,
+			});
 			res.status(200).json({
 				state: "success",
 				storesMovment,
 				dispensersMovment,
 				incomes,
 				others,
+				surplus,
+				calibrations,
+				coupons,
 			});
 		});
 	} catch (error) {

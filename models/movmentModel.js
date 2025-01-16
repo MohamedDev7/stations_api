@@ -26,7 +26,6 @@ const MovmentModel = sequelize.define("movments", {
 		unique: true,
 		validate: {
 			isUnique: async function (value) {
-				console.log(`value`, value);
 				const existingRow = await MovmentModel.findOne({
 					where: { number: value },
 				});

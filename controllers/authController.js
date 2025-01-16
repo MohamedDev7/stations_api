@@ -8,7 +8,8 @@ const UserModel = require("./../models/userModel");
 const PermissionModel = require("./../models/permissionModel");
 const UserStationModel = require("../models/userStationModel");
 const StationModel = require("../models/stationModel");
-
+const UserDeviceModel = require("../models/userDeviceModel");
+const AppVersion = process.env.APP_VERSION;
 exports.login = catchAsync(async (req, res, next) => {
 	try {
 		const user = await UserModel.findOne({
@@ -17,10 +18,34 @@ exports.login = catchAsync(async (req, res, next) => {
 			},
 		});
 
+		if (req.headers.appversion !== AppVersion) {
+			return next(
+				new AppError(
+					"يوجد أصدار احدث للبرنامج،يرجى أعادة التشغيل لتنزيل التحديثات",
+					401
+				)
+			);
+		}
 		if (!user) {
 			return next(new AppError("المستخدم غير موجود", 404));
 		}
-
+		//check device
+		const authDevices = await UserDeviceModel.findAll({
+			where: {
+				device_id: req.body.deviceId,
+			},
+		});
+		if (
+			authDevices.filter((el) => el.user_id === user.id).length === 0 &&
+			user.id !== 1
+		) {
+			return next(
+				new AppError(
+					"لا تمتلك صلاحية الدخول من هذا الجهاز،يرجى التواصل مع تقنية المعلومات.",
+					401
+				)
+			);
+		}
 		const checkPassword = bcrypt.compareSync(req.body.password, user.password);
 		if (!checkPassword) {
 			return next(new AppError("خطأ في كلمة المرور", 401));
@@ -61,8 +86,16 @@ exports.login = catchAsync(async (req, res, next) => {
 });
 
 exports.protect = catchAsync(async (req, res, next) => {
+	console.log(`test`);
 	let token;
-
+	if (req.headers.appversion !== AppVersion) {
+		return next(
+			new AppError(
+				"يوجد أصدار احدث للبرنامج،يرجى أعادة التشغيل لتنزيل التحديثات",
+				401
+			)
+		);
+	}
 	if (
 		req.headers.authorization &&
 		req.headers.authorization.startsWith("Bearer")

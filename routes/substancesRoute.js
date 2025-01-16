@@ -20,5 +20,6 @@ router
 	.delete(
 		// authController.restrictTo("deleteSubstance"),
 		substancesController.deleteSubstance
-	);
+	)
+	.post(substancesController.updateSubstancePrice);
 module.exports = router;

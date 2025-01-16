@@ -27,7 +27,6 @@ const TankMovmentModel = require("../models/tankMovmentModel");
 // 	}
 // });
 exports.addIncome = catchAsync(async (req, res, next) => {
-	console.log(`req.body`, req.body);
 	try {
 		const result = await sequelize.transaction(async (t) => {
 			const income = await IncomeModel.create(
