@@ -3,12 +3,46 @@ const SubstanceModel = require("./../models/substanceModel");
 const AppError = require("../utils/appError");
 const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
 const sequelize = require("./../connection");
+const { Op } = require("sequelize");
 exports.getAllSubstances = catchAsync(async (req, res, next) => {
 	try {
-		const substances = await SubstanceModel.findAll();
-		res.status(200).json({
-			state: "success",
-			substances,
+		await sequelize.transaction(async (t) => {
+			const substances = await SubstanceModel.findAll({ transaction: t });
+			const prices = await SubstancePriceMovmentModel.findAll({
+				attributes: [
+					"substance_id",
+					[sequelize.fn("max", sequelize.col("number")), "max_number"],
+				],
+				group: ["substance_id"],
+				raw: true,
+			});
+
+			res.status(200).json({
+				state: "success",
+				substances,
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getSubstancesPricesByDate = catchAsync(async (req, res, next) => {
+	try {
+		await sequelize.transaction(async (t) => {
+			const prices = await SubstancePriceMovmentModel.findAll({
+				where: {
+					[Op.and]: [
+						{ start_date: { [Op.lte]: req.params.date } }, // Start date is less than or equal to requestDate
+						{ end_date: { [Op.gte]: req.params.date } }, // End date is greater than or equal to requestDate
+					],
+				},
+				raw: true,
+			});
+
+			res.status(200).json({
+				state: "success",
+				prices,
+			});
 		});
 	} catch (error) {
 		return next(new AppError(error, 500));
@@ -31,18 +65,19 @@ exports.addSubstance = catchAsync(async (req, res, next) => {
 			const substance = await SubstanceModel.create(
 				{
 					name: req.body.name,
-					price: +req.body.price,
 				},
 				{ transaction: t }
 			);
-			console.log(`substance`, substance.id);
+
 			await SubstancePriceMovmentModel.create(
 				{
-					prev_price: req.body.price,
-					curr_price: req.body.price,
+					price: req.body.price,
 					substance_id: substance.id,
 					type: "تسعيرة اولية",
 					start_date: new Date(),
+					end_date: new Date("2100-12-31"),
+					number: 0,
+					name: req.body.name,
 				},
 				{ transaction: t }
 			);
@@ -83,22 +118,31 @@ exports.updateSubstance = catchAsync(async (req, res, next) => {
 	}
 });
 exports.updateSubstancePrice = catchAsync(async (req, res, next) => {
-	console.log(`req.params`, req.params);
+	const lastPriceNumber = await SubstancePriceMovmentModel.max("number", {
+		where: { substance_id: req.params.id },
+	});
+	const lastPrice = await SubstancePriceMovmentModel.findOne({
+		where: { substance_id: req.params.id, number: lastPriceNumber },
+	});
+	const currDate = new Date(req.body.date);
+	const previousDay = new Date(currDate);
+	previousDay.setDate(currDate.getDate() - 1);
 	try {
 		await sequelize.transaction(async (t) => {
-			await SubstanceModel.update(
-				{ price: req.body.newPrice },
+			await SubstancePriceMovmentModel.update(
 				{
-					where: { id: req.params.id },
-					transaction: t,
-				}
+					end_date: previousDay,
+				},
+				{ where: { id: lastPrice.id }, transaction: t }
 			);
 			await SubstancePriceMovmentModel.create(
 				{
-					prev_price: req.body.price,
-					curr_price: req.body.newPrice,
+					number: +lastPrice.number + 1,
+					price: req.body.newPrice,
 					substance_id: req.params.id,
 					start_date: req.body.date,
+					end_date: new Date("2100-12-31"),
+					name: req.body.name,
 					type: "تحريك تسعيرة",
 				},
 				{
@@ -110,7 +154,6 @@ exports.updateSubstancePrice = catchAsync(async (req, res, next) => {
 			});
 		});
 	} catch (error) {
-		console.log(`error`, error);
 		return next(new AppError(error, 500));
 	}
 });

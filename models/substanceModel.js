@@ -6,10 +6,6 @@ const SubstanceModel = sequelize.define("substance", {
 		type: DataTypes.STRING,
 		allowNull: false,
 	},
-	price: {
-		type: DataTypes.BIGINT,
-		allowNull: false,
-	},
 });
 
 module.exports = SubstanceModel;

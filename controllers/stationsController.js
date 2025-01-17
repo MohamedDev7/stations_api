@@ -15,6 +15,8 @@ const { Sequelize } = require("sequelize");
 const IncomeModel = require("../models/incomeModel");
 const DispenserWheelCounterMovmentModel = require("../models/dispenserWheelCounterMovmentModel");
 const SubstanceModel = require("../models/substanceModel");
+const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
+const { Op } = require("sequelize");
 exports.getAllStations = catchAsync(async (req, res, next) => {
 	try {
 		const stations = await StationModel.findAll({
@@ -47,8 +49,15 @@ exports.getStation = catchAsync(async (req, res, next) => {
 exports.addStation = catchAsync(async (req, res, next) => {
 	try {
 		const result = await sequelize.transaction(async (t) => {
-			const substances = await SubstanceModel.findAll();
-
+			const substances = await SubstancePriceMovmentModel.findAll({
+				where: {
+					[Op.and]: [
+						{ start_date: { [Op.lte]: req.body.date } }, // Start date is less than or equal to requestDate
+						{ end_date: { [Op.gte]: req.body.date } }, // End date is greater than or equal to requestDate
+					],
+				},
+				raw: true,
+			});
 			const station = await StationModel.create(
 				{
 					name: req.body.name,
@@ -104,12 +113,17 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					tank_id: el.id,
 					movment_id: movment.id,
 					station_id: station.id,
-					price: substances.filter((ele) => ele.id === el.substance_id)[0]
-						.price,
+					price: substances.filter(
+						(ele) => ele.substance_id === el.substance_id
+					)[0].price,
+					price_movment_id: substances.filter(
+						(ele) => ele.substance_id === el.substance_id
+					)[0].id,
 				};
 			});
 
 			await TankMovmentModel.bulkCreate(tanksMovmentsArr, { transaction: t });
+
 			const dispensersArr = req.body.dispensers.map((el) => {
 				return {
 					number: el.number,
@@ -141,9 +155,15 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					movment_id: +movment.id,
 					dispenser_id: +el.id,
 					station_id: station.id,
-					price: substances.filter((ele) => ele.id === substance_id)[0].price,
+					price: substances.filter(
+						(ele) => ele.substance_id === substance_id
+					)[0].price,
+					price_movment_id: substances.filter(
+						(ele) => ele.substance_id === substance_id
+					)[0].id,
 				};
 			});
+
 			await DispenserMovmentModel.bulkCreate(dispensersMovmentsArr, {
 				transaction: t,
 			});
@@ -158,6 +178,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					station_id: station.id,
 				};
 			});
+
 			await DispenserWheelCounterMovmentModel.bulkCreate(
 				dispensersWheelCounterMovmentsArr,
 				{
@@ -203,8 +224,12 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					movment_id: +movment.id,
 					truck_number: 1,
 					truck_driver: "رصيد افتتاحي",
-					price: substances.filter((ele) => ele.id === el.substance_id)[0]
-						.price,
+					price: substances.filter(
+						(ele) => ele.substance_id === el.substance_id
+					)[0].price,
+					price_movment_id: substances.filter(
+						(ele) => ele.substance_id === el.substance_id
+					)[0].id,
 				};
 			});
 
@@ -226,8 +251,12 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					shift_number: highestShift,
 					movment_id: movment.id,
 					station_id: station.id,
-					price: substances.filter((ele) => ele.id === store.substance_id)[0]
-						.price,
+					price: substances.filter(
+						(ele) => ele.substance_id === store.substance_id
+					)[0].price,
+					price_movment_id: substances.filter(
+						(ele) => ele.substance_id === store.substance_id
+					)[0].id,
 				});
 			});
 			await StoreMovmentModel.bulkCreate(storesMovmentsArr, { transaction: t });

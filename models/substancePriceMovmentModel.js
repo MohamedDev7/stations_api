@@ -10,15 +10,19 @@ const SubstancePriceMovmentModel = sequelize.define("substance_price_movment", {
 		type: DataTypes.DATEONLY,
 		allowNull: false,
 	},
-	prev_price: {
+	end_date: {
+		type: DataTypes.DATEONLY,
+	},
+	price: {
 		type: DataTypes.BIGINT,
 		allowNull: false,
 	},
-	curr_price: {
-		type: DataTypes.BIGINT,
-		allowNull: false,
-	},
+	number: { type: DataTypes.INTEGER, allowNull: false },
 	type: {
+		type: DataTypes.STRING,
+		allowNull: false,
+	},
+	name: {
 		type: DataTypes.STRING,
 		allowNull: false,
 	},

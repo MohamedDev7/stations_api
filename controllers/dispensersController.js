@@ -7,6 +7,7 @@ const TankModel = require("../models/tankModel");
 const DispenserModel = require("../models/dispenserModel");
 const ShiftModel = require("../models/shiftModel");
 const SubstanceModel = require("../models/substanceModel");
+const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
 // exports.getDispensersByStationId = catchAsync(async (req, res, next) => {
 // 	try {
 // 		const dispensers = await DispenserMovmentModel.findAll({
@@ -50,7 +51,7 @@ exports.getDispensersMovmentByMovmentIdAndShiftNumber = catchAsync(
 									include: [
 										{
 											model: SubstanceModel,
-											attributes: ["id", "name", "price"],
+											attributes: ["id", "name"],
 										},
 									],
 								},

@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("./../connection");
+const SubstancePriceMovmentModel = require("./substancePriceMovmentModel");
 const SubstanceModel = require("./substanceModel");
 
 const StoreModel = sequelize.define("store", {
@@ -20,6 +21,8 @@ const StoreModel = sequelize.define("store", {
 		allowNull: false,
 	},
 });
+StoreModel.belongsTo(SubstancePriceMovmentModel, {
+	foreignKey: "substance_id",
+});
 StoreModel.belongsTo(SubstanceModel, { foreignKey: "substance_id" });
-
 module.exports = StoreModel;

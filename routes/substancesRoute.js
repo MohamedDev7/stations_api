@@ -6,6 +6,7 @@ router
 	.route("")
 	.post(substancesController.addSubstance)
 	.get(substancesController.getAllSubstances);
+router.route("/date/:date").get(substancesController.getSubstancesPricesByDate);
 
 router
 	.route("/:id")

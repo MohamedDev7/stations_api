@@ -18,14 +18,14 @@ exports.login = catchAsync(async (req, res, next) => {
 			},
 		});
 
-		if (req.headers.appversion !== AppVersion) {
-			return next(
-				new AppError(
-					"يوجد أصدار احدث للبرنامج،يرجى أعادة التشغيل لتنزيل التحديثات",
-					401
-				)
-			);
-		}
+		// if (req.headers.appversion !== AppVersion) {
+		// 	return next(
+		// 		new AppError(
+		// 			"يوجد أصدار احدث للبرنامج،يرجى أعادة التشغيل لتنزيل التحديثات",
+		// 			401
+		// 		)
+		// 	);
+		// }
 		if (!user) {
 			return next(new AppError("المستخدم غير موجود", 404));
 		}
@@ -86,16 +86,15 @@ exports.login = catchAsync(async (req, res, next) => {
 });
 
 exports.protect = catchAsync(async (req, res, next) => {
-	console.log(`test`);
 	let token;
-	if (req.headers.appversion !== AppVersion) {
-		return next(
-			new AppError(
-				"يوجد أصدار احدث للبرنامج،يرجى أعادة التشغيل لتنزيل التحديثات",
-				401
-			)
-		);
-	}
+	// if (req.headers.appversion !== AppVersion) {
+	// 	return next(
+	// 		new AppError(
+	// 			"يوجد أصدار احدث للبرنامج،يرجى أعادة التشغيل لتنزيل التحديثات",
+	// 			401
+	// 		)
+	// 	);
+	// }
 	if (
 		req.headers.authorization &&
 		req.headers.authorization.startsWith("Bearer")

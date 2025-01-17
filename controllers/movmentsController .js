@@ -119,7 +119,6 @@ exports.getStationMovment = catchAsync(async (req, res, next) => {
 exports.getStationMovmentByDate = catchAsync(async (req, res, next) => {
 	try {
 		await sequelize.transaction(async (t) => {
-			console.log(`req.params`, req.params);
 			const movment = await MovmentModel.findOne({
 				where: {
 					station_id: +req.params.id,
@@ -212,7 +211,6 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 exports.addShiftMovment = catchAsync(async (req, res, next) => {
 	try {
 		await sequelize.transaction(async (t) => {
-			const substances = await SubstanceModel.findAll();
 			const incomesArr = req.body.incomes.map((el) => {
 				return {
 					amount: +el.amount,
@@ -226,14 +224,13 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					end: req.body.shift.end,
 					type: el.type,
 					movment_id: +req.body.movment_id,
-					price: substances.filter((ele) => ele.id === el.substance.id)[0]
-						.price,
+					price: el.substance.price,
 				};
 			});
-
 			await IncomeModel.bulkCreate(incomesArr, {
 				transaction: t,
 			});
+
 			const dispensersMovmentsArr = req.body.dispensers.map((el) => {
 				return {
 					prev_A: +el.prev_A,
@@ -247,9 +244,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					dispenser_id: +el.dispenser.id,
 					movment_id: +req.body.movment_id,
 					station_id: +req.body.station_id,
-					price: substances.filter(
-						(ele) => ele.id === el.dispenser.tank.substance.id
-					)[0].price,
+					price: el.dispenser.tank.substance.price,
 				};
 			});
 
@@ -268,8 +263,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					end: req.body.shift.end,
 					movment_id: +req.body.movment_id,
 					station_id: +req.body.station_id,
-					price: substances.filter((ele) => ele.id === el.store.substance.id)[0]
-						.price,
+					price: el.store.substance.price,
 				};
 			});
 			const storesMovments = await StoreMovmentModel.bulkCreate(
@@ -288,8 +282,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					start: req.body.shift.start,
 					end: req.body.shift.end,
 					type: el.type,
-					price: substances.filter((ele) => ele.id === el.substance.id)[0]
-						.price,
+					price: el.substance.price,
 				};
 			});
 			await OtherModel.bulkCreate(othersArr, { transaction: t });
@@ -304,8 +297,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					shift_number: req.body.shift.number,
 					start: req.body.shift.start,
 					end: req.body.shift.end,
-					price: substances.filter((ele) => ele.id === el.from_substance.id)[0]
-						.price,
+					price: el.from_substance.price,
 				};
 			});
 
@@ -326,8 +318,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					type: el.type,
 					start: req.body.shift.start,
 					end: req.body.shift.end,
-					price: substances.filter((ele) => ele.id === el.substance.id)[0]
-						.price,
+					price: el.substance.price,
 				};
 			});
 			await BranchWithdrawalsModel.bulkCreate(branchWithdrawalsArr, {
@@ -342,8 +333,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					amount: +el.amount,
 					start: req.body.shift.start,
 					end: req.body.shift.end,
-					price: substances.filter((ele) => ele.id === el.substance.id)[0]
-						.price,
+					price: el.substance.price,
 				};
 			});
 			await SurplusModel.bulkCreate(surplusArr, {
@@ -358,8 +348,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					shift_number: req.body.shift.number,
 					start: req.body.shift.start,
 					end: req.body.shift.end,
-					price: substances.filter((ele) => ele.id === el.substance.id)[0]
-						.price,
+					price: el.substance.price,
 				};
 			});
 			const addedCalibrations = await calibrationModel.bulkCreate(
@@ -397,6 +386,7 @@ exports.deleteMovment = catchAsync(async (req, res, next) => {
 			state: "success",
 		});
 	} catch (error) {
+		console.log(`error`, error);
 		return next(new AppError(error, 500));
 	}
 });

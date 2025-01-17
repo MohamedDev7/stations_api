@@ -1,5 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("./../connection");
+
+const SubstancePriceMovmentModel = require("./substancePriceMovmentModel");
 const SubstanceModel = require("./substanceModel");
 
 const TankModel = sequelize.define("tank", {
@@ -24,5 +26,6 @@ const TankModel = sequelize.define("tank", {
 		allowNull: false,
 	},
 });
+TankModel.belongsTo(SubstancePriceMovmentModel, { foreignKey: "substance_id" });
 TankModel.belongsTo(SubstanceModel, { foreignKey: "substance_id" });
 module.exports = TankModel;

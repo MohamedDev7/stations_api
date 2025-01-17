@@ -4,6 +4,7 @@ const StoreModel = require("./../models/storeModel");
 const { Op } = require("sequelize");
 const sequelize = require("./../connection");
 const AppError = require("../utils/appError");
+const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
 const SubstanceModel = require("../models/substanceModel");
 exports.getStoreByStationId = catchAsync(async (req, res, next) => {
 	try {
@@ -14,7 +15,7 @@ exports.getStoreByStationId = catchAsync(async (req, res, next) => {
 			include: [
 				{
 					model: SubstanceModel,
-					attributes: ["id", "name", "price"], // Specify the attributes you want to include
+					attributes: ["id", "name"], // Specify the attributes you want to include
 				},
 			],
 		});
@@ -43,12 +44,13 @@ exports.getStoresMovmentByMovmentIdAndShiftNumber = catchAsync(
 							include: [
 								{
 									model: SubstanceModel,
-									attributes: ["id", "name", "price"],
+									attributes: ["id", "name"],
 								},
 							],
 						},
 					],
 				});
+
 				res.status(200).json({
 					state: "success",
 					storesMovments,

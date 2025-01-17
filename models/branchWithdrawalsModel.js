@@ -34,6 +34,7 @@ const BranchWithdrawalsModel = sequelize.define("branch_withdrawals", {
 		type: DataTypes.INTEGER,
 		allowNull: false,
 	},
+
 	start: {
 		type: DataTypes.TIME,
 		allowNull: false,
