@@ -47,6 +47,10 @@ const MovmentModel = sequelize.define("movments", {
 		type: DataTypes.INTEGER,
 		allowNull: false,
 	},
+	has_stocktaking: {
+		type: DataTypes.INTEGER,
+		allowNull: false,
+	},
 });
 MovmentModel.belongsTo(StationModel, { foreignKey: "station_id" });
 module.exports = MovmentModel;

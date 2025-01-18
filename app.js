@@ -11,7 +11,8 @@ const dispensersRouter = require("./routes/dispensersRoute");
 const storesRouter = require("./routes/storesRoute");
 const employeesRouter = require("./routes/employeesRoute");
 const incomesRouter = require("./routes/incomesRoute");
-const movmentsRoute = require("./routes/movmentsRoute");
+const movmentsRouter = require("./routes/movmentsRoute");
+const stocktakingRouter = require("./routes/stocktakingRoutes");
 
 const cors = require("cors");
 const AppError = require("./utils/appError");
@@ -43,7 +44,8 @@ app.use("/api/v1/shifts", shiftsRouter);
 app.use("/api/v1/stores", storesRouter);
 app.use("/api/v1/employees", employeesRouter);
 app.use("/api/v1/income", incomesRouter);
-app.use("/api/v1/movments", movmentsRoute);
+app.use("/api/v1/movments", movmentsRouter);
+app.use("/api/v1/stocktaking", stocktakingRouter);
 
 app.all("/*", (req, res, next) => {
 	next(new AppError(`cant find ${req.originalUrl} on this server`, 404));

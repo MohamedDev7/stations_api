@@ -200,6 +200,7 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 			number: req.body.number,
 			shifts: station.shifts,
 			state: "pending",
+			has_stocktaking: 0,
 		});
 		res.status(200).json({
 			state: "success",
