@@ -14,7 +14,7 @@ const DispenserModel = require("../models/dispenserModel");
 const TankModel = require("../models/tankModel");
 const calibrationModel = require("../models/calibrationModel");
 const calibrationMemberModel = require("../models/calibrationMemberModel");
-const StoresTransferModel = require("../models/storesTransferModel");
+
 const SurplusModel = require("../models/surplusModel");
 const BranchWithdrawalsModel = require("../models/branchWithdrawalsModel");
 const StocktakingStoresMovmentsModel = require("../models/stocktakingStoresMovmentsModel");
@@ -37,7 +37,7 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				where: {
 					station_id: req.query.station,
 					date: {
-						[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
+						[Op.between]: [req.query.startDate, req.query.endDate],
 					},
 				},
 				raw: true,
@@ -50,6 +50,7 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				raw: true,
 				transaction: t,
 			});
+			const substance = await SubstanceModel.findByPk(req.query.substance);
 
 			const movmentsIds = movments.map((el) => el.id);
 			const shifts = await MovmentsShiftsModel.findAll({
@@ -60,104 +61,128 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				},
 				raw: true,
 			});
-
-			const stores = await StoreModel.findAll({
-				where: {
-					station_id: req.query.station,
-					substance_id: req.query.substance,
-				},
-				include: [
-					{
-						model: SubstanceModel,
-						attributes: ["id", "name"],
-					},
-				],
-				attributes: ["id"],
-				raw: true,
-				transaction: t,
-			});
-
-			const storesIds = stores.map((el) => el.id);
 			const incomes = await IncomeModel.findAll({
 				where: {
 					station_id: req.query.station,
-					store_id: {
-						[Op.in]: storesIds,
-					},
 					movment_id: {
 						[Op.in]: movmentsIds,
 					},
+					"$store.substance_id$": req.query.substance, // Filter by substance_id
 				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						required: true,
+					},
+				],
 				attributes: [
 					"movment_id",
-					"store_id",
 					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
 				],
-				group: ["movment_id", "store_id"],
+				group: ["movment_id"],
+				raw: true,
+				transaction: t,
+			});
+			const surplus = await SurplusModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: movmentsIds,
+					},
+					"$store.substance_id$": req.query.substance, // Filter by substance_id
+				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						required: true,
+					},
+				],
+				attributes: [
+					"movment_id",
+					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+				],
+				group: ["movment_id"],
 				raw: true,
 				transaction: t,
 			});
 			const others = await OtherModel.findAll({
 				where: {
 					station_id: req.query.station,
-					store_id: {
-						[Op.in]: storesIds,
-					},
 					movment_id: {
 						[Op.in]: movmentsIds,
 					},
+					"$store.substance_id$": req.query.substance, // Filter by substance_id
 				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						required: true,
+					},
+				],
 				attributes: [
 					"movment_id",
-					"store_id",
+
 					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
 				],
-				group: ["movment_id", "store_id"],
+				group: ["movment_id"],
 				raw: true,
 				transaction: t,
 			});
-			const stockTaking = await StocktakingStoresMovmentsModel.findAll({
+			const stockTaking = await StocktakingModel.findAll({
 				where: {
 					station_id: req.query.station,
-					store_id: {
-						[Op.in]: storesIds,
-					},
 					movment_id: {
 						[Op.in]: movmentsIds,
 					},
+					substance_id: req.query.substance, // Filter by substance_id
 				},
+
 				raw: true,
 				transaction: t,
 			});
 			const branchWithdrawals = await BranchWithdrawalsModel.findAll({
 				where: {
 					station_id: req.query.station,
-					store_id: {
-						[Op.in]: storesIds,
+					movment_id: {
+						[Op.in]: movmentsIds,
 					},
+					"$store.substance_id$": req.query.substance, // Filter by substance_id
+				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						required: true,
+					},
+				],
+				attributes: [
+					"movment_id",
+
+					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+				],
+				group: ["movment_id"],
+				raw: true,
+				transaction: t,
+			});
+
+			const stores_movments = await StoreMovmentModel.findAll({
+				where: {
+					station_id: req.query.station,
+					"$store.substance_id$": req.query.substance, // Filter by substance_id
 					movment_id: {
 						[Op.in]: movmentsIds,
 					},
 				},
-				attributes: [
-					"movment_id",
-					"store_id",
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						required: true,
+					},
 				],
-				group: ["movment_id", "store_id"],
-				raw: true,
-				transaction: t,
-			});
-			const stores_movments = await StoreMovmentModel.findAll({
-				where: {
-					station_id: req.query.station,
-					store_id: {
-						[Op.in]: storesIds,
-					},
-					date: {
-						[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
-					},
-				},
 				attributes: [
 					"movment_id",
 					"shift_id",
@@ -186,22 +211,30 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				const startShift = shifts.filter(
 					(ele) => ele.movment_id === el.id && ele.number === 1
 				);
-				const endShift = shifts.filter(
-					(ele) => ele.movment_id === el.id && ele.number === el.shifts
-				);
 				const startMovment = stores_movments.filter(
 					(ele) => ele.movment_id === el.id && ele.shift_id === startShift[0].id
 				)[0];
-				const endMovment = stores_movments.filter(
-					(ele) => ele.movment_id === el.id && ele.shift_id === endShift[0].id
-				)[0];
-
-				el.prev_value = +startMovment.total_prev_value;
-				el.curr_value = +endMovment.total_curr_value;
-				el.price = endMovment.price;
-				el.income =
+				let endShift = null;
+				let endMovment = null;
+				let incomesAmount =
 					incomes.filter((ele) => ele.movment_id === el.id)[0]?.total_amount ||
 					0;
+				let surplusAmount =
+					surplus.filter((ele) => ele.movment_id === el.id)[0]?.total_amount ||
+					0;
+				el.date = el.date.split("T")[0].replace(/-/g, "/");
+				if (el.shifts > 1) {
+					endShift = shifts.filter(
+						(ele) => ele.movment_id === el.id && ele.number === el.shifts
+					);
+					endMovment = stores_movments.filter(
+						(ele) => ele.movment_id === el.id && ele.shift_id === endShift[0].id
+					)[0];
+				}
+
+				el.price = startMovment.price;
+				el.prev_value = +startMovment.total_prev_value;
+				el.income = +incomesAmount + +surplusAmount;
 				el.others =
 					others.filter((ele) => ele.movment_id === el.id)[0]?.total_amount ||
 					0;
@@ -209,22 +242,33 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 					branchWithdrawals.filter((ele) => ele.movment_id === el.id)[0]
 						?.total_amount || 0;
 				el.incomeAndPrevValue = +el.income + +el.prev_value;
+
+				el.othersValue = el.others * el.price;
+				el.branchWithdrawalsValue = el.branchWithdrawals * el.price;
+				el.stockTakingValue = stockTakingValue;
+				if (endMovment) {
+					el.curr_value = +endMovment.total_curr_value;
+					el.final_value = +endMovment.total_curr_value;
+				} else {
+					el.curr_value = +startMovment.total_curr_value;
+					el.final_value = +startMovment.total_curr_value;
+				}
 				el.cashSalesAmount =
 					el.incomeAndPrevValue -
 					+el.curr_value -
 					el.others -
-					+el.branchWithdrawals;
+					+el.branchWithdrawals -
+					(stockTakingValue > 0 ? stockTakingValue : 0);
 				el.cashSalesValue = el.cashSalesAmount * el.price;
-				el.othersValue = el.others * el.price;
-				el.branchWithdrawalsValue = el.branchWithdrawals * el.price;
-				el.totalSpend = el.incomeAndPrevValue - +el.curr_value;
-				el.stockTakingValue = stockTakingValue;
-				el.final_value = +endMovment.total_curr_value + el.stockTakingValue;
+				el.totalSpend =
+					el.incomeAndPrevValue -
+					+el.curr_value -
+					(stockTakingValue > 0 ? stockTakingValue : 0);
 			});
 			res.status(200).json({
 				info: {
 					station_name: station[0].name,
-					substance_name: stores[0]["substance.name"],
+					substance_name: substance.name,
 					fromDate: req.query.startDate,
 					toDate: req.query.endDate,
 				},
@@ -311,6 +355,25 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				raw: true,
 				transaction: t,
 			});
+			const surplus = await SurplusModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: {
+						[Op.in]: storesIds,
+					},
+					movment_id: {
+						[Op.in]: movmentsIds,
+					},
+				},
+				attributes: [
+					"store_id",
+					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+					[sequelize.literal("SUM(price * amount)"), "total_value"],
+				],
+				group: ["store_id"],
+				raw: true,
+				transaction: t,
+			});
 			const others = await OtherModel.findAll({
 				where: {
 					station_id: req.query.station,
@@ -340,11 +403,6 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 						[Op.in]: movmentsIds,
 					},
 				},
-				attributes: [
-					"store_id",
-					[sequelize.literal("SUM(curr_value - prev_value)"), "total_amount"],
-				],
-				group: ["store_id"],
 				raw: true,
 				transaction: t,
 			});
@@ -370,17 +428,22 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 			});
 			groupedstoresById.forEach((el) => {
 				let total_cash = 0;
+				let incomeAmount =
+					incomes.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_amount || 0;
+				let surplusAmount =
+					surplus.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_amount || 0;
+				let incomeValue =
+					incomes.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_value || 0;
 				el.data.forEach((ele) => {
 					total_cash =
 						total_cash + (+ele.prev_value - +ele.curr_value) * ele.price;
 				});
 
-				el.income =
-					incomes.filter((ele) => ele.store_id === el.store_id)[0]
-						?.total_amount || 0;
-				el.income_value =
-					incomes.filter((ele) => ele.store_id === el.store_id)[0]
-						?.total_value || 0;
+				el.income = +incomeAmount + +surplusAmount;
+				el.income_value = +incomeValue;
 
 				el.others =
 					others.filter((ele) => ele.store_id === el.store_id)[0]
@@ -394,27 +457,36 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				el.branchWithdrawals_value =
 					branchWithdrawals.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_value || 0;
-				el.stockTaking =
-					stockTaking.filter((ele) => ele.store_id === el.store_id)[0]
-						?.total_amount || 0;
-				// el.othersAndBranchWithdrawals = +el.others + +el.branchWithdrawals;
+				// Find stocktaking with max date for this store
+				const storeStocktakings = stockTaking.filter(
+					(ele) => ele.store_id === el.store_id
+				);
+
+				let stockTakingValue = 0;
+
+				if (storeStocktakings.length > 0) {
+					// Find the stocktaking with the maximum date
+					const maxDateStocktaking = storeStocktakings.reduce(
+						(max, current) => {
+							return new Date(current.createdAt) > new Date(max.createdAt)
+								? current
+								: max;
+						},
+						storeStocktakings[0]
+					);
+					// Calculate the difference between current and previous values
+					stockTakingValue =
+						maxDateStocktaking.curr_value - maxDateStocktaking.prev_value;
+				}
+
+				el.stockTaking = stockTakingValue;
 				el.total_cash =
 					total_cash -
 					el.others_value +
 					+el.income_value -
 					el.branchWithdrawals_value;
-				// el.incomeAndPrevValue;
-				// (el.store = `${group.data[0]["store.name"]} - ${group.data[0]["store.substance.name"]}`),
-				// 	(el.cashSalesAmount =
-				// 		incomeAndPrevValue -
-				// 		+maxDateData.curr_value -
-				// 		total_others -
-				// 		+total_branchWithdrawals);
 			});
 
-			// res.status(200).json({
-			// 	stores: groupedstoresById,
-			// });
 			const storesMovmentsArr = groupedstoresById.map((group) => {
 				const store_id = group.store_id;
 				// Extract dates and find min and max dates
@@ -439,27 +511,6 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 					return new Date(date).getTime() === maxDate.getTime();
 				});
 
-				// const total_incomes =
-				// 	incomes.filter((ele) => ele.store_id === store_id)[0]?.total_amount ||
-				// 	0;
-				// const total_others =
-				// 	others.filter((ele) => ele.store_id === store_id)[0]?.total_amount ||
-				// 	0;
-				// const total_branchWithdrawals =
-				// 	branchWithdrawals.filter((ele) => ele.store_id === store_id)[0]
-				// 		?.total_amount || 0;
-				// const total_incomes_value =
-				// 	incomes.filter((ele) => ele.store_id === store_id)[0]?.total_value ||
-				// 	0;
-				// const total_others_value =
-				// 	others.filter((ele) => ele.store_id === store_id)[0]?.total_value ||
-				// 	0;
-				// const total_branchWithdrawals_value =
-				// 	branchWithdrawals.filter((ele) => ele.store_id === store_id)[0]
-				// 		?.total_value || 0;
-
-				// const incomeAndPrevValue = +total_incomes + +minDateData.prev_value;
-
 				return {
 					...maxDateData,
 					prev_value: minDateData.prev_value,
@@ -481,18 +532,10 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 						+group.others -
 						+group.branchWithdrawals,
 					total_cash: group.total_cash,
-					// cashSalesValue:
-					// 	incomeAndPrevValue -
-					// 	+maxDateData.curr_value -
-					// 	total_others -
-					// 	+total_branchWithdrawals,
-					// cashSalesValue = el.cashSalesAmount * el.price;
-					// othersValue: total_others_value + total_branchWithdrawals_value,
-					// branchWithdrawalsValue: total_branchWithdrawals_value,
 					totalSpend:
 						+minDateData.prev_value + +group.income - +maxDateData.curr_value,
 					stockTaking: +group.stockTaking,
-					final_value: +maxDateData.curr_value + +group.stockTaking,
+					final_value: +maxDateData.curr_value,
 				};
 			});
 
@@ -702,8 +745,7 @@ exports.getDepositsMovmentInPeriod = catchAsync(async (req, res, next) => {
 					raw: true,
 					transaction: t,
 				});
-			}
-			if (req.query.type === "الحركة") {
+			} else if (req.query.type === "الحركة") {
 				deposits = await DepositModel.findAll({
 					where: {
 						station_id: req.query.station,
@@ -721,6 +763,10 @@ exports.getDepositsMovmentInPeriod = catchAsync(async (req, res, next) => {
 					transaction: t,
 				});
 			}
+			deposits.forEach((el) => {
+				el.invoice_date = el.invoice_date.split("T")[0].replace(/-/g, "/");
+				el.date = el.date.split("T")[0].replace(/-/g, "/");
+			});
 			const station = await StationModel.findAll({
 				where: {
 					id: req.query.station,
@@ -835,6 +881,9 @@ exports.getIncomesMovmentInPeriod = catchAsync(async (req, res, next) => {
 				if (el.type === "initial") {
 					el.type = "رصيد افتتاحي";
 				}
+				el["movment.date"] = el["movment.date"]
+					.split("T")[0]
+					.replace(/-/g, "/");
 			});
 			surpluses.forEach((el) => {
 				el.type = "فائض";
@@ -863,7 +912,8 @@ exports.getIncomesMovmentInPeriod = catchAsync(async (req, res, next) => {
 
 				return acc;
 			}, {});
-			const result = Object.values(groupedData); // Convert the object to an array of groups
+			const result = Object.values(groupedData);
+			// Convert the object to an array of groups
 			const totalAmountsArray = Object.entries(
 				joinedArray.reduce((acc, item) => {
 					const substanceId = item["store.substance.id"];
@@ -1700,134 +1750,7 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 		}
 	}
 );
-// exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
-// 	try {
-// 		await sequelize.transaction(async (t) => {
-// 			const startDate = new Date(req.query.startDate);
-// 			const previousDay = new Date(startDate);
-// 			previousDay.setDate(startDate.getDate() - 1);
-// 			const deposits = await DepositModel.findAll({
-// 				where: {
-// 					station_id: +req.query.station,
-// 					invoice_date: {
-// 						[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
-// 					},
-// 				},
-// 				attributes: {
-// 					include: [
-// 						[Sequelize.literal(`amount`), "creditor"],
-// 						[Sequelize.literal(`invoice_date`), "date"],
-// 						[Sequelize.literal(0), "debtor"],
-// 					],
-// 				},
-// 				transaction: t,
-// 				raw: true,
-// 			});
-// 			// deposits.forEach((el) => {
-// 			// 	el.date = el.invoice_date;
-// 			// });
-// 			const prevDeposits = await DepositModel.findAll({
-// 				where: {
-// 					station_id: req.query.station,
-// 					invoice_date: {
-// 						[Op.lt]: startDate,
-// 					},
-// 				},
-// 				attributes: [[Sequelize.literal("SUM(amount)"), "cash"]],
-// 				group: ["station_id"],
-// 				transaction: t,
-// 				raw: true,
-// 			});
-// 			const receives = await ReceivesModel.findAll({
-// 				where: {
-// 					station_id: req.query.station,
-// 					date: {
-// 						[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
-// 					},
-// 				},
-// 				attributes: {
-// 					include: [
-// 						[Sequelize.literal(`amount`), "debtor"],
-// 						[Sequelize.literal(0), "creditor"],
-// 					],
-// 				},
-// 				transaction: t,
-// 				raw: true,
-// 			});
 
-// 			const prevReceives = await ReceivesModel.findAll({
-// 				where: {
-// 					station_id: req.query.station,
-// 					date: {
-// 						[Op.lt]: startDate,
-// 					},
-// 				},
-// 				attributes: [[Sequelize.literal("SUM(amount)"), "cash"]],
-// 				group: ["station_id"],
-// 				transaction: t,
-// 				raw: true,
-// 			});
-
-// 			const opening = [
-// 				{
-// 					date: previousDay,
-// 					id: "-",
-// 					statement: "رصيد سابق",
-// 					debtor: +prevReceives[0]?.cash || 0,
-// 					creditor: +prevDeposits[0]?.cash || 0,
-// 					balance:
-// 						(+prevDeposits[0]?.cash || 0) - (+prevReceives[0]?.cash || 0),
-// 				},
-// 			];
-
-// 			const cash = opening.concat(deposits, receives);
-// 			// Sort the combined array based on the date in ascending order
-// 			let perioddebtor = 0;
-// 			let periodcreditor = 0;
-// 			cash.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-// 			cash.forEach((el, i) => {
-// 				if (i !== 0) {
-// 					perioddebtor = perioddebtor + el.debtor;
-// 					periodcreditor = periodcreditor + el.creditor;
-// 					el.balance = cash[i - 1].balance - el.debtor + el.creditor;
-// 				}
-// 			});
-// 			const station = await StationModel.findOne({
-// 				where: {
-// 					id: +req.query.station,
-// 				},
-// 				transaction: t,
-// 			});
-//
-// 			const final_statment =
-// 				cash[cash.length - 1].balance > 0
-// 					? `دائن ${tafqeet(
-// 							Math.abs(cash[cash.length - 1].balance)
-// 					  )} ريال فقط لا غير`
-// 					: `مدين ${tafqeet(
-// 							Math.abs(cash[cash.length - 1].balance)
-// 					  )} ريال فقط لا غير`;
-// 			res.status(200).json({
-// 				state: "success",
-// 				data: {
-// 					cash,
-// 					info: {
-// 						station_name: station.name,
-// 						startDate: req.query.startDate,
-// 						endDate: req.query.endDate,
-// 						perioddebtor,
-// 						periodcreditor,
-// 						final_statment,
-// 						name: "الصندوق",
-// 					},
-// 				},
-// 			});
-// 		});
-// 	} catch (error) {
-// 		return next(new AppError(error, 500));
-// 	}
-// });
 exports.getStationAccountStatementReport = catchAsync(
 	async (req, res, next) => {
 		try {
@@ -2000,9 +1923,9 @@ exports.getStationAccountStatementReport = catchAsync(
 					raw: true,
 				});
 				deposits.forEach((el) => {
-					el.statement = `مقابل توريد ${el.amount.toLocaleString("en")} ريال ل${
-						el["bank.name"]
-					}`;
+					el.statement = `مقابل توريد ${el.amount.toLocaleString(
+						"en"
+					)} ريال لـ ${el["bank.name"]}`;
 				});
 				//التوريدات السابقة
 				const prevDeposits = await DepositModel.findAll({
@@ -2030,9 +1953,9 @@ exports.getStationAccountStatementReport = catchAsync(
 						debtor: (+prevIncomes[0]?.debtor || 0) + (+prevSurplus.debtor || 0),
 						creditor: +prevDeposits[0]?.creditor || 0,
 						balance:
-							(+prevDeposits[0]?.creditor || 0) -
 							(+prevIncomes[0]?.debtor || 0) +
-							(+prevSurplus.debtor || 0),
+							(+prevSurplus.debtor || 0) -
+							(+prevDeposits[0]?.creditor || 0),
 					},
 				];
 				// حساب فوارق التسعيرة
@@ -2072,7 +1995,7 @@ exports.getStationAccountStatementReport = catchAsync(
 					if (i !== 0) {
 						perioddebtor = perioddebtor + el.debtor;
 						periodcreditor = periodcreditor + +el.creditor;
-						el.balance = cash[i - 1].balance - el.debtor + el.creditor;
+						el.balance = cash[i - 1].balance + el.debtor - el.creditor;
 					}
 				});
 				const station = await StationModel.findOne({
@@ -2083,7 +2006,7 @@ exports.getStationAccountStatementReport = catchAsync(
 				});
 
 				const final_statment =
-					cash[cash.length - 1].balance > 0
+					cash[cash.length - 1].balance < 0
 						? `دائن ${tafqeet(
 								Math.abs(cash[cash.length - 1].balance)
 						  )} ريال فقط لا غير`
@@ -2358,7 +2281,10 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 					(el) => el["movment.id"] === dispenser["movment.id"]
 				)[0];
 				const branchWithdrawals = branchWithdrawalsCash.filter(
-					(el) => el["movment.id"] === dispenser["movment.id"]
+					(el) =>
+						el["movment.id"] === dispenser["movment.id"] &&
+						el["store.substance.id"] ===
+							dispenser["dispenser.tank.substance.id"]
 				)[0];
 				if (other) {
 					dispenser.creditor = +dispenser.creditor - +other.total_cash;
@@ -2534,7 +2460,6 @@ exports.getStocktakingPriceReport = catchAsync(async (req, res, next) => {
 			});
 		});
 	} catch (error) {
-		console.log(error);
 		return next(new AppError(error, 500));
 	}
 });
@@ -2626,14 +2551,16 @@ exports.getOverview = catchAsync(async (req, res, next) => {
 					.filter((ele) => ele.movment_id === el.id);
 				el.tanks = tanks.filter((ele) => ele.station_id === el.station_id);
 				const movementDate = new Date(el.date);
-				console.log(`now`, now);
-				console.log(`movementDate`, movementDate);
+
 				const diffTime = Math.abs(now - movementDate);
 				const diffDays = diffTime / (1000 * 60 * 60 * 24);
-				console.log(`diffDays`, diffDays);
+
 				el.isUpToDate = diffDays <= 2;
 			});
-
+			// Sort latestMovementDetails by station number
+			latestMovementDetails.sort((a, b) => {
+				return a["station.number"] - b["station.number"];
+			});
 			res.status(200).json({
 				state: "success",
 				stations: latestMovementDetails,

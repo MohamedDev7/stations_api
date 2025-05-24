@@ -21,6 +21,7 @@ router
 router
 	.route("/incomesMovment")
 	.get(reportsController.getIncomesMovmentInPeriod);
+router.route("/creditSales").get(reportsController.getIncomesMovmentInPeriod);
 router
 	.route("/depositsMovment")
 	.get(reportsController.getDepositsMovmentInPeriod);

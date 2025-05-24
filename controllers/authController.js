@@ -17,14 +17,15 @@ exports.login = catchAsync(async (req, res, next) => {
 				username: req.body.username,
 			},
 		});
-		if (req.headers.appversion !== AppVersion) {
-			return next(
-				new AppError(
-					`يوجد اصدار احدث للبرنامج ${req.headers.appversion} - ${AppVersion}`,
-					401
-				)
-			);
-		}
+		// if (req.headers.appversion !== AppVersion) {
+		// 	return next(
+		// 		new AppError(
+		// 			`اصدار السيرفر ${AppVersion}\n اصدار البرنامج ${req.headers.appversion}`,
+
+		// 			401
+		// 		)
+		// 	);
+		// }
 		if (!user) {
 			return next(new AppError("المستخدم غير موجود", 404));
 		}
@@ -86,9 +87,9 @@ exports.login = catchAsync(async (req, res, next) => {
 
 exports.protect = catchAsync(async (req, res, next) => {
 	let token;
-	if (req.headers.appversion !== AppVersion) {
-		return next(new AppError("يوجد اصدار احدث للبرنامج", 401));
-	}
+	// if (req.headers.appversion !== AppVersion) {
+	// 	return next(new AppError("يوجد اصدار احدث للبرنامج", 401));
+	// }
 
 	if (
 		req.headers.authorization &&

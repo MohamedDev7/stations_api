@@ -98,6 +98,7 @@ exports.addIncome = catchAsync(async (req, res, next) => {
 			});
 			const nextMovments = await MovmentModel.findAll({
 				where: {
+					station_id: currMovment.station_id,
 					date: {
 						[Op.gt]: currMovment.date,
 					},
@@ -130,6 +131,7 @@ exports.addIncome = catchAsync(async (req, res, next) => {
 			const nextMovmentsStoreMovments = await StoreMovmentModel.findAll({
 				where: {
 					movment_id: { [Op.in]: nextMovmentsIds },
+					store_id: req.body.store.id,
 				},
 				raw: true,
 			});

@@ -14,6 +14,7 @@ const BranchWithdrawalsModel = require("../models/branchWithdrawalsModel");
 const MovmentModel = require("../models/movmentModel");
 const { Op } = require("sequelize");
 const MovmentsShiftsModel = require("../models/movmentsShiftsModel");
+const CreditSaleModel = require("../models/creditSaleModel");
 
 exports.getShiftsByStationId = catchAsync(async (req, res, next) => {
 	try {
@@ -149,7 +150,6 @@ exports.deleteShiftBYMovmentIdAndShiftId = catchAsync(
 );
 exports.getShiftDataByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
-		console.log("req.params.shift", req.params.shift);
 		try {
 			await sequelize.transaction(async (t) => {
 				const dispensersMovment = await DispenserMovmentModel.findAll({
@@ -241,6 +241,25 @@ exports.getShiftDataByMovmentIdAndShiftId = catchAsync(
 					],
 					transaction: t,
 				});
+				const creditSales = await CreditSaleModel.findAll({
+					where: {
+						movment_id: req.params.id,
+						shift_id: req.params.shift,
+					},
+					include: [
+						{
+							model: StoreModel,
+							attributes: ["id", "name"],
+							include: [
+								{
+									model: SubstanceModel,
+									attributes: ["id", "name"],
+								},
+							],
+						},
+					],
+					transaction: t,
+				});
 				const coupons = await BranchWithdrawalsModel.findAll({
 					where: {
 						movment_id: req.params.id,
@@ -267,6 +286,7 @@ exports.getShiftDataByMovmentIdAndShiftId = catchAsync(
 					dispensersMovment,
 					coupons,
 					others,
+					creditSales,
 				});
 			});
 		} catch (error) {

@@ -116,6 +116,10 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 								debtor =
 									(lastPrice.price - lastPrice.prev_price) * el.curr_value;
 								amount = el.curr_value;
+							} else {
+								debtor =
+									(lastPrice.price - lastPrice.prev_price) * el.prev_value;
+								amount = el.prev_value;
 							}
 						} else {
 							if (el.curr_value < el.prev_value) {
@@ -127,6 +131,10 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 								creditor =
 									(lastPrice.prev_price - lastPrice.price) * el.curr_value;
 								amount = el.curr_value;
+							} else {
+								creditor =
+									(lastPrice.prev_price - lastPrice.price) * el.prev_value;
+								amount = el.prev_value;
 							}
 						}
 						return {
@@ -254,7 +262,7 @@ exports.getAllStocktakings = catchAsync(async (req, res, next) => {
 					},
 				},
 			});
-			console.log(total);
+
 			res.status(200).json({
 				state: "success",
 				stocktaking,

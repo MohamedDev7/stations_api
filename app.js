@@ -13,6 +13,7 @@ const employeesRouter = require("./routes/employeesRoute");
 const banksRouter = require("./routes/banksRoute");
 const depositsRouter = require("./routes/depositsRoute");
 const receivesRouter = require("./routes/receivesRoute");
+const creditSalesRouter = require("./routes/creditSalesRoute");
 const incomesRouter = require("./routes/incomesRoute");
 const calibrationsRouter = require("./routes/calibrationsRoute");
 const surplusesRouter = require("./routes/surplusesRoute");
@@ -57,6 +58,7 @@ app.use("/api/v1/stocktaking", stocktakingRouter);
 app.use("/api/v1/reports", reportsRouter);
 app.use("/api/v1/banks", banksRouter);
 app.use("/api/v1/deposits", depositsRouter);
+app.use("/api/v1/creditSales", creditSalesRouter);
 
 app.all("/*", (req, res, next) => {
 	next(new AppError(`cant find ${req.originalUrl} on this server`, 404));

@@ -23,6 +23,9 @@ const notificationQueue = require("../queues/notificationQueue");
 const PermissionModel = require("../models/permissionModel");
 const UserModel = require("../models/userModel");
 const UserStationModel = require("../models/userStationModel");
+const CreditSaleModel = require("../models/creditSaleModel");
+const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
+const StocktakingModel = require("../models/stocktakingModel");
 exports.getAllMovments = catchAsync(async (req, res, next) => {
 	try {
 		const filters = JSON.parse(req.query.filters);
@@ -251,6 +254,42 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 			if (!prevMovment) {
 				return next(new AppError("لم يتم ادخال حركة اليوم السابق", 500));
 			}
+
+			//check price movment stocktaking
+			const priceMovment = await SubstancePriceMovmentModel.findAll({
+				where: {
+					start_date: req.body.date,
+				},
+				raw: true,
+			});
+			if (priceMovment.length > 0) {
+				// Check if each price movement has a stocktaking
+				for (const movement of priceMovment) {
+					const hasStocktaking = await StocktakingModel.findOne({
+						where: {
+							substance_id: movement.substance_id,
+							date: previousDay,
+							station_id: req.body.station_id,
+							type: "تسعيرة",
+							prev_price: movement.prev_price,
+							curr_price: movement.price,
+						},
+					});
+
+					if (!hasStocktaking) {
+						return next(
+							new AppError(
+								`لم يتم إجراء جرد بتاريخ ${
+									previousDay.toISOString().split("T")[0]
+								} عند تغير السعر من ${movement.prev_price} إلى ${
+									movement.price
+								}`,
+								500
+							)
+						);
+					}
+				}
+			}
 			const movment = await MovmentModel.create(
 				{
 					station_id: req.body.station_id,
@@ -323,7 +362,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 					deficit: el.deficit,
 				};
 			});
-			console.log(storesMovmentsArr);
+
 			const storesMovments = await StoreMovmentModel.bulkCreate(
 				storesMovmentsArr,
 				{ transaction: t }
@@ -343,21 +382,21 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 				};
 			});
 			await OtherModel.bulkCreate(othersArr, { transaction: t });
-			const storesTransfaresArr = req.body.storesTransfer.map((el) => {
+			const creditSalesArr = req.body.creditSales.map((el) => {
 				return {
 					station_id: +req.body.station_id,
 					movment_id: +req.body.movment_id,
-					from_store_id: el.from_store,
-					to_store_id: el.to_store,
-					amount: +el.amount,
 					shift_id: req.body.shift.id,
-					price: el.from_substance.price,
+					from_store: el.store,
+					beneficiary_store: el.beneficiary,
+					amount: el.amount,
+					title: el.title,
+					price: el.substance.price,
+					employee_id: el.employee_id,
 				};
 			});
 
-			await StoresTransferModel.bulkCreate(storesTransfaresArr, {
-				transaction: t,
-			});
+			await CreditSaleModel.bulkCreate(creditSalesArr, { transaction: t });
 			const branchWithdrawalsArr = req.body.coupons.map((el) => {
 				return {
 					station_id: +req.body.station_id,
@@ -427,6 +466,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 						where: {
 							movment_id: currMovment.id,
 							number: req.body.shift.number + 1,
+							station_id: req.body.station_id,
 						},
 						raw: true,
 					});
@@ -479,7 +519,6 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 			}
 			//update stores
 			//update curr shift
-
 			for (const { id, curr_value, price } of req.body.currStoresMovments) {
 				await StoreMovmentModel.update(
 					{
@@ -497,6 +536,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 			//update next shifts
 			const nextMovments = await MovmentModel.findAll({
 				where: {
+					station_id: req.body.station_id,
 					date: {
 						[Op.gt]: currDate, // Find all records where the date is greater than currDate
 					},
@@ -635,7 +675,76 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 			await OtherModel.bulkCreate(othersToAdd, {
 				transaction: t,
 			});
+			//updating credit sales
+			// let creditSalesToAdd = [];
+			// let creditSalesToEdit = [];
+			// let creditSalesToDelete = [];
+			// req.body.creditSales.forEach((el) => {
+			// 	if (el.db_id) {
+			// 		creditSalesToEdit.push({
+			// 			from_store: el.store,
+			// 			beneficiary_store: el.beneficiary_store,
+			// 			// store_movment_id: req.body.currStoresMovments.filter(
+			// 			// 	(ele) => ele.store_id === el.store
+			// 			// )[0].id,
+			// 			amount: +el.amount,
+			// 			price: el.price,
+			// 			title: el.title,
+			// 			employee_id: el.employee_id,
+			// 			db_id: el.db_id,
+			// 		});
+			// 	}
+			// 	if (!el.db_id) {
+			//
+			// 		creditSalesToAdd.push({
+			// 			station_id: +req.body.station_id,
+			// 			movment_id: +req.body.movment_id,
+			// 			shift_id: req.body.shift.id,
+			// 			from_store: el.store,
+			// 			beneficiary_store: el.beneficiary,
+			// 			amount: +el.amount,
+			// 			title: el.title,
+			// 			price: el.substance.price,
+			// 			employee_id: el.employee_id,
+			// 		});
+			// 	}
+			// });
 
+			// const dbCreditSales = await CreditSaleModel.findAll({
+			// 	where: {
+			// 		movment_id: req.body.movment_id,
+			// 		shift_id: req.body.shift.id,
+			// 	},
+			// 	raw: true,
+			// });
+
+			// creditSalesToDelete = dbCreditSales.filter(
+			// 	(dbCreditSale) =>
+			// 		!req.body.creditSales
+			// 			.filter((el) => el.db_id)
+			// 			.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id)
+			// );
+			// const creditSaleToDeleteIds = creditSalesToDelete.map((el) => el.id);
+			// const updateCreditSalesPromises = creditSalesToEdit.map((el) => {
+			// 	return CreditSaleModel.update(el, {
+			// 		where: { id: el.db_id },
+			// 		transaction: t,
+			// 	});
+			// });
+			// await Promise.all(updateCreditSalesPromises);
+
+			// await CreditSaleModel.destroy({
+			// 	where: {
+			// 		id: {
+			// 			[Op.in]: creditSaleToDeleteIds,
+			// 		},
+			// 	},
+			// 	transaction: t,
+			// });
+
+			// await CreditSaleModel.bulkCreate(creditSalesToAdd, {
+			// 	transaction: t,
+			// });
 			//updating coupons
 			let couponsToAdd = [];
 			let couponsToEdit = [];
@@ -884,19 +993,32 @@ exports.changeMovmentState = catchAsync(async (req, res, next) => {
 					],
 					raw: true,
 				});
+				const incomes = await IncomeModel.findAll({
+					where: {
+						movment_id: req.body.movment_id,
+					},
+					raw: true,
+				});
 				const storeLines = storesData
 					.map((store) => {
 						const storeName = store["store.name"];
+						let income = 0;
+						const filteredIncomes = incomes.filter(
+							(el) => el.store_id === store.store_id
+						);
+						filteredIncomes.forEach((el) => (income = income + el.amount));
 						const value = store.curr_value;
+						const sales = store.prev_value + income - store.curr_value;
+
 						const substance = store["store.substance.name"];
-						return `${storeName}-${substance}:${
+						return `${storeName}-${substance}:\nالمبيعات:${sales}لتر${
 							store.deficit > 0
 								? `\nالرصيد الدفتري:${value}لتر\nالعجز:${store.deficit}لتر`
 								: ""
 						}\nالرصيد الفعلي:${value - store.deficit}لتر`;
 					})
-					.join("\n=========\n");
-				console.log(storeLines);
+					.join("\n===============\n");
+
 				const users = await UserStationModel.findAll({
 					where: { station_id: movment.station_id },
 					raw: true,
