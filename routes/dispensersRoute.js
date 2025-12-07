@@ -18,4 +18,7 @@ router.route("/movments/shifts/:id/:shift_id").get(
 	// authController.restrictTo("editstore"),
 	dispensersController.getDispensersMovmentByMovmentIdAndShiftId
 );
+router
+	.route("/annual/:station_id")
+	.get(dispensersController.getAnnualDispensersMovment);
 module.exports = router;

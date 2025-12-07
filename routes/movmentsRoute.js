@@ -7,10 +7,19 @@ router
 	.route("/shift")
 	.post(movmentsController.addShiftMovment)
 	.patch(movmentsController.editShiftMovment);
+router
+	.route("/shift/spicial")
+	.patch(movmentsController.spicialEditShiftMovment);
 
 router.route("").get(movmentsController.getAllMovments);
+router
+	.route("/others/:movment_id/:shift_id")
+	.get(movmentsController.getOthersByMovmentIdAndShiftId);
 router.route("/report/:id").get(movmentsController.getMovmentReport);
 router.route("/state/:id").post(movmentsController.changeMovmentState);
+router
+	.route("/state/spicial/:id")
+	.post(movmentsController.spicialChangeMovmentState);
 router
 	.route("/:id")
 	.get(

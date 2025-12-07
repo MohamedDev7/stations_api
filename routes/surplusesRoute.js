@@ -9,8 +9,12 @@ router
 router
 	.route("/movment/:movment_id/:shift_id")
 	.get(surplusesController.getSurplusesByMovmentIdAndShiftId);
+router
+	.route("/movment/date/:movment_id/:date")
+	.get(surplusesController.getSurplusesByMovmentIdAndDate);
 
 router.route("/:id").delete(surplusesController.deleteSurplus);
+router.route("/spicial").patch(surplusesController.spicialAddSurplus);
 // .patch(
 // 	// authController.restrictTo("editTreasury"),
 // 	substancesController.updateSubstance

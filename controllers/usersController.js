@@ -1,16 +1,17 @@
 const AppError = require("../utils/appError");
 const catchAsync = require("../utils/catchAsync");
 const bcrypt = require("bcryptjs");
-const UserModel = require("./../models/userModel");
-const PermissionModel = require("./../models/permissionModel");
+const { getModel } = require("../utils/modelSelect");
 const { Op } = require("sequelize");
 const sequelize = require("./../connection");
-const UserStationModel = require("../models/userStationModel");
+
 const notificationQueue = require("../queues/notificationQueue");
 const crypto = require("crypto");
 
 exports.getAllUsers = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
+
 		// Fetch users from the database
 		const users = await UserModel.findAll({
 			attributes: ["id", "username", "first_name", "last_name", "phone"],
@@ -32,6 +33,9 @@ exports.getAllUsers = catchAsync(async (req, res, next) => {
 });
 exports.getUser = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
+		const PermissionModel = getModel(req.headers["x-year"], "permission");
+		const UserStationModel = getModel(req.headers["x-year"], "user_station");
 		const userId = req.params.id;
 
 		// Fetch user details from the UserModel
@@ -66,6 +70,7 @@ exports.getUser = catchAsync(async (req, res, next) => {
 });
 exports.getUsername = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
 		const userId = req.params.id;
 
 		// Fetch the username of the user from the UserModel
@@ -89,6 +94,9 @@ exports.getUsername = catchAsync(async (req, res, next) => {
 });
 exports.addUser = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
+		const PermissionModel = getModel(req.headers["x-year"], "permission");
+		const UserStationModel = getModel(req.headers["x-year"], "user_station");
 		// Check if the username already exists
 		const existingUser = await UserModel.findOne({
 			where: { username: req.body.username },
@@ -103,7 +111,7 @@ exports.addUser = catchAsync(async (req, res, next) => {
 		let newUser;
 		let permissions = [];
 
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
 			newUser = await UserModel.create(
 				{
 					username: req.body.username,
@@ -112,7 +120,7 @@ exports.addUser = catchAsync(async (req, res, next) => {
 					last_name: req.body.lastname,
 					phone: req.body.phone,
 				},
-				{ transaction: t }
+				{ transaction: t, userId: req.user.id }
 			);
 			Object.entries(req.body.permissions).forEach(([permission, value]) => {
 				if (value === true) {
@@ -143,28 +151,34 @@ exports.addUser = catchAsync(async (req, res, next) => {
 });
 exports.deleteUser = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
+
 		if (req.params.id === "1") {
 			return next(new AppError("لايمكن حذف هذا المستخدم", 500));
 		}
 
 		// Find the user by ID and delete it
-		const user = await UserModel.findByPk(req.params.id);
-		if (!user) {
-			return next(new AppError("User not found", 404));
-		}
-
-		await user.destroy();
-
+		await UserModel.destroy({
+			where: {
+				id: req.params.id,
+			},
+			// individualHooks: true,
+			userId: req.user.id,
+		});
 		res.status(200).json({ state: "success" });
 	} catch (error) {
 		// Handle any errors that occur during the user deletion process
+
 		return next(new AppError("حصل خطا أثناء حذف المستخدم", 500));
 	}
 });
 
 exports.updateUser = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		const UserModel = getModel(req.headers["x-year"], "user");
+		const PermissionModel = getModel(req.headers["x-year"], "permission");
+		const UserStationModel = getModel(req.headers["x-year"], "user_station");
+		await req.db.transaction(async (t) => {
 			await UserModel.update(
 				{
 					username: req.body.username,
@@ -173,8 +187,15 @@ exports.updateUser = catchAsync(async (req, res, next) => {
 					last_name: req.body.lastname,
 					phone: req.body.phone,
 				},
-				{ where: { id: req.params.id }, transaction: t }
-			); // Get existing permissions for the user
+				{
+					where: { id: req.params.id },
+					transaction: t,
+					individualHooks: true,
+					userId: req.user.id,
+				}
+			);
+
+			// Get existing permissions for the user
 			const existingPermissions = await PermissionModel.findAll({
 				where: { user_id: req.params.id },
 			});
@@ -196,7 +217,9 @@ exports.updateUser = catchAsync(async (req, res, next) => {
 				} else if (value === false && existingPermissionsSet.has(permission)) {
 					permissionsToDelete.push(permission);
 				}
-			} // Update permissions within the same transaction
+			}
+
+			// Update permissions within the same transaction
 			await Promise.all([
 				PermissionModel.bulkCreate(permissionsToUpdate, { transaction: t }),
 				PermissionModel.destroy({
@@ -250,6 +273,8 @@ exports.updateUser = catchAsync(async (req, res, next) => {
 });
 exports.changePassword = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
+
 		const userId = req.user.id;
 		const { old, password } = req.body;
 
@@ -265,7 +290,7 @@ exports.changePassword = catchAsync(async (req, res, next) => {
 		const hashedNewPassword = bcrypt.hashSync(password, salt);
 		await UserModel.update(
 			{ password: hashedNewPassword },
-			{ where: { id: userId } }
+			{ where: { id: userId }, individualHooks: true, userId: req.user.id }
 		);
 		if (user.phone) {
 			await notificationQueue.add("send-whatsapp", {
@@ -282,13 +307,14 @@ exports.changePassword = catchAsync(async (req, res, next) => {
 });
 exports.changePasswordByAdmin = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
 		const userId = req.params.id;
 		const randomPassword = crypto.randomBytes(4).toString("hex");
 		const salt = bcrypt.genSaltSync(10);
 		const hashedPassword = bcrypt.hashSync(randomPassword, salt);
 		await UserModel.update(
 			{ password: hashedPassword },
-			{ where: { id: userId } }
+			{ where: { id: userId }, individualHooks: true, userId: req.user.id }
 		);
 		const user = await UserModel.findByPk(userId);
 		if (user.phone) {

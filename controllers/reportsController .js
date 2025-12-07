@@ -1,38 +1,35 @@
 const catchAsync = require("../utils/catchAsync");
-const MovmentModel = require("./../models/movmentModel");
 const sequelize = require("./../connection");
 const AppError = require("../utils/appError");
-const StationModel = require("../models/stationModel");
-const DispenserMovmentModel = require("../models/dispenserMovmentModel");
-const IncomeModel = require("../models/incomeModel");
-const StoreMovmentModel = require("../models/storeMovmentModel");
-const OtherModel = require("../models/otherModel");
-const { Sequelize, Op, fn, col } = require("sequelize");
-const StoreModel = require("../models/storeModel");
-const SubstanceModel = require("../models/substanceModel");
-const DispenserModel = require("../models/dispenserModel");
-const TankModel = require("../models/tankModel");
-const calibrationModel = require("../models/calibrationModel");
-const calibrationMemberModel = require("../models/calibrationMemberModel");
+const { getModel } = require("../utils/modelSelect");
 
-const SurplusModel = require("../models/surplusModel");
-const BranchWithdrawalsModel = require("../models/branchWithdrawalsModel");
-const StocktakingStoresMovmentsModel = require("../models/stocktakingStoresMovmentsModel");
-const CalibrationReportModel = require("../models/calibrationReportModel");
-const EmployeesModel = require("../models/employeeModel");
-const DepositModel = require("../models/depositModel");
-const ReceivesModel = require("../models/receiveModel");
+const { Sequelize, Op, fn, col, literal } = require("sequelize");
 const tafqeet = require("../utils/Tafqeet");
-const BankModel = require("../models/bankModel");
-const priceMovmentEntriesModel = require("../models/priceMovmentEntriesModel");
-const StocktakingModel = require("../models/stocktakingModel");
-const StocktakingMembersModel = require("../models/stocktakingMembersModel");
-const CalibrationModel = require("../models/calibrationModel");
-const MovmentsShiftsModel = require("../models/movmentsShiftsModel");
 
 exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const IncomeModel = getModel(req.headers["x-year"], "income");
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			// const CreditSaleSettlementModel = getModel(
+			// 	req.headers["x-year"],
+			// 	"credit_sale_settlement"
+			// );
+			const CalibrationModel = getModel(req.headers["x-year"], "calibration");
+			const OtherModel = getModel(req.headers["x-year"], "other");
+			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
 			const movments = await MovmentModel.findAll({
 				where: {
 					station_id: req.query.station,
@@ -78,7 +75,7 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				],
 				attributes: [
 					"movment_id",
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
 				],
 				group: ["movment_id"],
 				raw: true,
@@ -101,12 +98,13 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				],
 				attributes: [
 					"movment_id",
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
 				],
 				group: ["movment_id"],
 				raw: true,
 				transaction: t,
 			});
+
 			const others = await OtherModel.findAll({
 				where: {
 					station_id: req.query.station,
@@ -125,25 +123,13 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				attributes: [
 					"movment_id",
 
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
 				],
 				group: ["movment_id"],
 				raw: true,
 				transaction: t,
 			});
-			const stockTaking = await StocktakingModel.findAll({
-				where: {
-					station_id: req.query.station,
-					movment_id: {
-						[Op.in]: movmentsIds,
-					},
-					substance_id: req.query.substance, // Filter by substance_id
-				},
-
-				raw: true,
-				transaction: t,
-			});
-			const branchWithdrawals = await BranchWithdrawalsModel.findAll({
+			const calibrations = await CalibrationModel.findAll({
 				where: {
 					station_id: req.query.station,
 					movment_id: {
@@ -161,13 +147,99 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				attributes: [
 					"movment_id",
 
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
 				],
 				group: ["movment_id"],
 				raw: true,
 				transaction: t,
 			});
+			const creditSales = await CreditSaleModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: movmentsIds,
+					},
+					"$store.substance_id$": req.query.substance, // Filter by substance_id
+				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						required: true,
+					},
+				],
+				attributes: [
+					"movment_id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+				],
+				group: ["movment_id"],
+				raw: true,
+				transaction: t,
+			});
+			// const coverdCreditSalesArr = await CreditSaleModel.findAll({
+			// 	where: {
+			// 		station_id: req.query.station,
+			// 		movment_id: {
+			// 			[Op.in]: movmentsIds,
+			// 		},
+			// 		isSettled: 1,
+			// 		"$store.substance_id$": req.query.substance, // Filter by substance_id
+			// 	},
+			// 	include: [
+			// 		{
+			// 			model: CreditSaleSettlementModel,
+			// 			where: {
+			// 				date: {
+			// 					[Op.between]: [req.query.startDate, req.query.endDate],
+			// 				},
+			// 				type: {
+			// 					[Op.in]: ["خصم كمية", "نقدي"],
+			// 				},
+			// 			},
+			// 			attributes: ["date"],
+			// 		},
+			// 		{
+			// 			model: StoreModel,
+			// 			attributes: [],
+			// 			required: true,
+			// 		},
+			// 	],
+			// 	raw: true,
+			// 	transaction: t,
+			// });
+			// const groupedCoverdCreditSales = {};
 
+			// for (const record of coverdCreditSalesArr) {
+			// 	const movmentId = record.movment_id;
+
+			// 	if (!groupedCoverdCreditSales[movmentId]) {
+			// 		groupedCoverdCreditSales[movmentId] = {
+			// 			movment_id: movmentId,
+			// 			total_amount: 0,
+			// 			total_value: 0,
+			// 		};
+			// 	}
+
+			// 	groupedCoverdCreditSales[movmentId].total_amount += record.amount;
+			// 	groupedCoverdCreditSales[movmentId].total_value +=
+			// 		record.amount * record.price;
+			// }
+
+			// Convert the grouped result object into an array of objects
+			// const CoverdCreditSales = Object.values(groupedCoverdCreditSales);
+
+			// const stockTaking = await StocktakingModel.findAll({
+			// 	where: {
+			// 		station_id: req.query.station,
+			// 		movment_id: {
+			// 			[Op.in]: movmentsIds,
+			// 		},
+			// 		substance_id: req.query.substance, // Filter by substance_id
+			// 	},
+
+			// 	raw: true,
+			// 	transaction: t,
+			// });
 			const stores_movments = await StoreMovmentModel.findAll({
 				where: {
 					station_id: req.query.station,
@@ -187,27 +259,21 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 					"movment_id",
 					"shift_id",
 					"price",
-					[
-						sequelize.fn("SUM", sequelize.col("prev_value")),
-						"total_prev_value",
-					],
-					[
-						sequelize.fn("SUM", sequelize.col("curr_value")),
-						"total_curr_value",
-					],
+					[req.db.fn("SUM", req.db.col("prev_value")), "total_prev_value"],
+					[req.db.fn("SUM", req.db.col("curr_value")), "total_curr_value"],
 				],
 				group: ["movment_id", "shift_id", "price"],
 				raw: true,
 				transaction: t,
 			});
 			movments.forEach((el) => {
-				let stockTakingValue = 0;
-				stockTaking
-					.filter((ele) => ele.movment_id === el.id)
-					.forEach((ele) => {
-						stockTakingValue =
-							stockTakingValue + ele.curr_value - ele.prev_value;
-					});
+				// let stockTakingValue = 0;
+				// stockTaking
+				// 	.filter((ele) => ele.movment_id === el.id)
+				// 	.forEach((ele) => {
+				// 		stockTakingValue =
+				// 			stockTakingValue + ele.curr_value - ele.prev_value;
+				// 	});
 				const startShift = shifts.filter(
 					(ele) => ele.movment_id === el.id && ele.number === 1
 				);
@@ -219,8 +285,23 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 				let incomesAmount =
 					incomes.filter((ele) => ele.movment_id === el.id)[0]?.total_amount ||
 					0;
+				// let coverdCreditSalesAmount =
+				// 	CoverdCreditSales.filter((ele) => ele.movment_id === el.id)[0]
+				// 		?.total_amount || 0;
+				// let coverdCreditSalesValue =
+				// 	CoverdCreditSales.filter((ele) => ele.movment_id === el.id)[0]
+				// 		?.total_value || 0;
 				let surplusAmount =
 					surplus.filter((ele) => ele.movment_id === el.id)[0]?.total_amount ||
+					0;
+				let calibrationsAmount =
+					calibrations.filter((ele) => ele.movment_id === el.id)[0]
+						?.total_amount || 0;
+				let creditSalesAmount =
+					creditSales.filter((ele) => ele.movment_id === el.id)[0]
+						?.total_amount || 0;
+				let othersAmount =
+					others.filter((ele) => ele.movment_id === el.id)[0]?.total_amount ||
 					0;
 				el.date = el.date.split("T")[0].replace(/-/g, "/");
 				if (el.shifts > 1) {
@@ -234,18 +315,20 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 
 				el.price = startMovment.price;
 				el.prev_value = +startMovment.total_prev_value;
-				el.income = +incomesAmount + +surplusAmount;
-				el.others =
-					others.filter((ele) => ele.movment_id === el.id)[0]?.total_amount ||
-					0;
-				el.branchWithdrawals =
-					branchWithdrawals.filter((ele) => ele.movment_id === el.id)[0]
-						?.total_amount || 0;
-				el.incomeAndPrevValue = +el.income + +el.prev_value;
+				el.income = +incomesAmount + +surplusAmount + +calibrationsAmount;
+				el.others = +othersAmount;
+				el.calibrations = +calibrationsAmount;
+				el.surplus_amount = +surplusAmount;
+				el.creditSalesAmount = +creditSalesAmount;
 
+				el.incomeAndPrevValue = +el.income + +el.prev_value;
+				el.totalCreditSalesAmount =
+					+el.others + +creditSalesAmount + +el.calibrations;
+				el.totalCreditSalesValue = +el.totalCreditSalesAmount * el.price;
 				el.othersValue = el.others * el.price;
-				el.branchWithdrawalsValue = el.branchWithdrawals * el.price;
-				el.stockTakingValue = stockTakingValue;
+				el.calibrationsValue = el.calibrations * el.price;
+
+				// el.stockTakingValue = stockTakingValue;
 				if (endMovment) {
 					el.curr_value = +endMovment.total_curr_value;
 					el.final_value = +endMovment.total_curr_value;
@@ -257,13 +340,14 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 					el.incomeAndPrevValue -
 					+el.curr_value -
 					el.others -
-					+el.branchWithdrawals -
-					(stockTakingValue > 0 ? stockTakingValue : 0);
+					+el.calibrations -
+					+el.creditSalesAmount;
+				// -
+				// (stockTakingValue > 0 ? stockTakingValue : 0);
 				el.cashSalesValue = el.cashSalesAmount * el.price;
-				el.totalSpend =
-					el.incomeAndPrevValue -
-					+el.curr_value -
-					(stockTakingValue > 0 ? stockTakingValue : 0);
+				el.totalSpend = el.incomeAndPrevValue - +el.curr_value;
+				// -
+				// (stockTakingValue > 0 ? stockTakingValue : 0);
 			});
 			res.status(200).json({
 				info: {
@@ -281,7 +365,29 @@ exports.getStoresMovmentInPeriod = catchAsync(async (req, res, next) => {
 });
 exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const IncomeModel = getModel(req.headers["x-year"], "income");
+			const QuantityDeductionModel = getModel(
+				req.headers["x-year"],
+				"quantity_deduction"
+			);
+			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+			const CalibrationModel = getModel(req.headers["x-year"], "calibration");
+			const OtherModel = getModel(req.headers["x-year"], "other");
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			// const CreditSaleSettlementModel = getModel(
+			// 	req.headers["x-year"],
+			// 	"credit_sale_settlement"
+			// );
+
 			const movments = await MovmentModel.findAll({
 				where: {
 					station_id: req.query.station,
@@ -307,7 +413,7 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				include: [
 					{
 						model: StoreModel,
-						attributes: ["id", "name"],
+						attributes: ["id", "name", "type"],
 						include: [
 							{
 								model: SubstanceModel,
@@ -348,8 +454,27 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				},
 				attributes: [
 					"store_id",
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
-					[sequelize.literal("SUM(price * amount)"), "total_value"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(price * amount)"), "total_value"],
+				],
+				group: ["store_id"],
+				raw: true,
+				transaction: t,
+			});
+			const quantityDeduction = await QuantityDeductionModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: {
+						[Op.in]: storesIds,
+					},
+					date: {
+						[Op.between]: [req.query.startDate, req.query.endDate],
+					},
+				},
+				attributes: [
+					"store_id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(price * amount)"), "total_value"],
 				],
 				group: ["store_id"],
 				raw: true,
@@ -367,8 +492,28 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				},
 				attributes: [
 					"store_id",
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
-					[sequelize.literal("SUM(price * amount)"), "total_value"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(price * amount)"), "total_value"],
+				],
+				group: ["store_id"],
+				raw: true,
+				transaction: t,
+			});
+
+			const calibrations = await CalibrationModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: {
+						[Op.in]: storesIds,
+					},
+					movment_id: {
+						[Op.in]: movmentsIds,
+					},
+				},
+				attributes: [
+					"store_id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(price * amount)"), "total_value"],
 				],
 				group: ["store_id"],
 				raw: true,
@@ -386,28 +531,14 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				},
 				attributes: [
 					"store_id",
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
-					[sequelize.literal("SUM(price * amount)"), "total_value"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(price * amount)"), "total_value"],
 				],
 				group: ["store_id"],
 				raw: true,
 				transaction: t,
 			});
-			const stockTaking = await StocktakingStoresMovmentsModel.findAll({
-				where: {
-					station_id: req.query.station,
-					store_id: {
-						[Op.in]: storesIds,
-					},
-					movment_id: {
-						[Op.in]: movmentsIds,
-					},
-				},
-				raw: true,
-				transaction: t,
-			});
-
-			const branchWithdrawals = await BranchWithdrawalsModel.findAll({
+			const creditSales = await CreditSaleModel.findAll({
 				where: {
 					station_id: req.query.station,
 					store_id: {
@@ -419,32 +550,107 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				},
 				attributes: [
 					"store_id",
-					[sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
-					[sequelize.literal("SUM(price * amount)"), "total_value"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(price * amount)"), "total_value"],
 				],
 				group: ["store_id"],
 				raw: true,
 				transaction: t,
 			});
+
+			// const coverdCreditSalesArr = await CreditSaleModel.findAll({
+			// 	where: {
+			// 		station_id: req.query.station,
+			// 		store_id: {
+			// 			[Op.in]: storesIds,
+			// 		},
+			// 		movment_id: {
+			// 			[Op.in]: movmentsIds,
+			// 		},
+			// 		isSettled: 1,
+			// 	},
+			// 	include: [
+			// 		{
+			// 			model: CreditSaleSettlementModel,
+			// 			where: {
+			// 				date: {
+			// 					[Op.between]: [req.query.startDate, req.query.endDate],
+			// 				},
+			// 				type: {
+			// 					[Op.in]: ["خصم كمية", "نقدي"],
+			// 				},
+			// 			},
+			// 			attributes: ["date"],
+			// 		},
+			// 	],
+			// 	raw: true,
+			// 	transaction: t,
+			// });
+			// const groupedCoverdCreditSales = {};
+
+			// for (const record of coverdCreditSalesArr) {
+			// 	const storeId = record.store_id;
+
+			// 	if (!groupedCoverdCreditSales[storeId]) {
+			// 		groupedCoverdCreditSales[storeId] = {
+			// 			store_id: storeId,
+			// 			total_amount: 0,
+			// 			total_value: 0,
+			// 		};
+			// 	}
+
+			// 	groupedCoverdCreditSales[storeId].total_amount += record.amount;
+			// 	groupedCoverdCreditSales[storeId].total_value +=
+			// 		record.amount * record.price;
+			// }
+
+			// const CoverdCreditSales = Object.values(groupedCoverdCreditSales);
+
 			groupedstoresById.forEach((el) => {
 				let total_cash = 0;
 				let incomeAmount =
 					incomes.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_amount || 0;
+				let quantityDeductionAmount =
+					quantityDeduction.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_amount || 0;
+				let quantityDeductionValue =
+					quantityDeduction.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_value || 0;
+				let calibrationAmount =
+					calibrations.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_amount || 0;
 				let surplusAmount =
 					surplus.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_amount || 0;
+				let surplusValue =
+					surplus.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_value || 0;
 				let incomeValue =
 					incomes.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_value || 0;
+				let calibrationValue =
+					calibrations.filter((ele) => ele.store_id === el.store_id)[0]
+						?.total_value || 0;
+				// let coverdCreditSalesAmount =
+				// 	CoverdCreditSales.filter((ele) => ele.store_id === el.store_id)[0]
+				// 		?.total_amount || 0;
+				// let coverdCreditSalesValue =
+				// 	CoverdCreditSales.filter((ele) => ele.store_id === el.store_id)[0]
+				// 		?.total_value || 0;
 				el.data.forEach((ele) => {
 					total_cash =
 						total_cash + (+ele.prev_value - +ele.curr_value) * ele.price;
 				});
-
+				console.log(`total_cash`, total_cash);
 				el.income = +incomeAmount + +surplusAmount;
-				el.income_value = +incomeValue;
-
+				el.income_value = +incomeValue + +surplusValue;
+				el.quantityDeduction = +quantityDeductionAmount;
+				el.quantityDeduction_value = +quantityDeductionValue;
+				el.calibration = +calibrationAmount;
+				el.calibration_value = +calibrationValue;
+				// el.coverd_credit_sales_amount = +coverdCreditSalesAmount;
+				// el.coverd_credit_sales_value = +coverdCreditSalesValue;
 				el.others =
 					others.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_amount || 0;
@@ -452,37 +658,16 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 					others.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_value || 0;
 				el.branchWithdrawals =
-					branchWithdrawals.filter((ele) => ele.store_id === el.store_id)[0]
+					creditSales.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_amount || 0;
 				el.branchWithdrawals_value =
-					branchWithdrawals.filter((ele) => ele.store_id === el.store_id)[0]
+					creditSales.filter((ele) => ele.store_id === el.store_id)[0]
 						?.total_value || 0;
-				// Find stocktaking with max date for this store
-				const storeStocktakings = stockTaking.filter(
-					(ele) => ele.store_id === el.store_id
-				);
 
-				let stockTakingValue = 0;
-
-				if (storeStocktakings.length > 0) {
-					// Find the stocktaking with the maximum date
-					const maxDateStocktaking = storeStocktakings.reduce(
-						(max, current) => {
-							return new Date(current.createdAt) > new Date(max.createdAt)
-								? current
-								: max;
-						},
-						storeStocktakings[0]
-					);
-					// Calculate the difference between current and previous values
-					stockTakingValue =
-						maxDateStocktaking.curr_value - maxDateStocktaking.prev_value;
-				}
-
-				el.stockTaking = stockTakingValue;
 				el.total_cash =
 					total_cash -
 					el.others_value +
+					// el.coverd_credit_sales_value +
 					+el.income_value -
 					el.branchWithdrawals_value;
 			});
@@ -514,27 +699,37 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 				return {
 					...maxDateData,
 					prev_value: minDateData.prev_value,
-					income: +group.income,
+					income: +group.income + +group.calibration,
 					others: +group.others,
 					others_value: +group.others_value,
 					branchWithdrawals: +group.branchWithdrawals,
 					branchWithdrawals_value: +group.branchWithdrawals_value,
 					othersAndbranchWithdrawalsAmount:
-						+group.others + +group.branchWithdrawals,
+						+group.others + +group.branchWithdrawals + +group.calibration,
+					// - +group.coverd_credit_sales_amount,
 					othersAndbranchWithdrawalsValue:
-						+group.others_value + +group.branchWithdrawals_value,
-					incomeAndPrevValue: +minDateData.prev_value + +group.income,
+						+group.others_value +
+						+group.branchWithdrawals_value +
+						group.calibration_value,
+					// - +group.coverd_credit_sales_value,
+					incomeAndPrevValue:
+						+minDateData.prev_value + +group.income + +group.calibration,
 					store: `${group.data[0]["store.name"]} - ${group.data[0]["store.substance.name"]}`,
 					cashSalesAmount:
 						+minDateData.prev_value +
 						+group.income -
 						+maxDateData.curr_value -
 						+group.others -
+						+group.quantityDeduction -
 						+group.branchWithdrawals,
+					// + +group.coverd_credit_sales_amount,
 					total_cash: group.total_cash,
 					totalSpend:
-						+minDateData.prev_value + +group.income - +maxDateData.curr_value,
-					stockTaking: +group.stockTaking,
+						+minDateData.prev_value +
+						+group.income +
+						+group.calibration -
+						group.quantityDeduction -
+						+maxDateData.curr_value,
 					final_value: +maxDateData.curr_value,
 				};
 			});
@@ -578,7 +773,20 @@ exports.getStoresMovmentSummaryInPeriod = catchAsync(async (req, res, next) => {
 });
 exports.getDispensersMovmentInPeriod = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
 			const movments = await MovmentModel.findAll({
 				where: {
 					station_id: req.query.station,
@@ -726,7 +934,11 @@ exports.getDispensersMovmentInPeriod = catchAsync(async (req, res, next) => {
 });
 exports.getDepositsMovmentInPeriod = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const DepositModel = getModel(req.headers["x-year"], "deposit");
+			const BankModel = getModel(req.headers["x-year"], "bank");
+			const StationModel = getModel(req.headers["x-year"], "station");
+
 			let deposits;
 			if (req.query.type === "اشعار الايداع") {
 				deposits = await DepositModel.findAll({
@@ -790,8 +1002,17 @@ exports.getDepositsMovmentInPeriod = catchAsync(async (req, res, next) => {
 });
 exports.getIncomesMovmentInPeriod = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const IncomeModel = getModel(req.headers["x-year"], "income");
+			const CalibrationModel = getModel(req.headers["x-year"], "calibration");
+			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const StationModel = getModel(req.headers["x-year"], "station");
+
 			const storesIds = req.query.stores.split(",").map(Number);
+			console.log(`req.query`, req.query);
 			const movments = await MovmentModel.findAll({
 				where: {
 					station_id: req.query.station,
@@ -956,155 +1177,26 @@ exports.getIncomesMovmentInPeriod = catchAsync(async (req, res, next) => {
 		return next(new AppError(error, 500));
 	}
 });
-// exports.getDispensersMovmentInPeriod = catchAsync(async (req, res, next) => {
-// 	try {
-// 		await sequelize.transaction(async (t) => {
-// 			const startMovment = await MovmentModel.findOne({
-// 				where: {
-// 					station_id: req.query.station,
-// 					date: req.query.startDate,
-// 				},
-// 				raw: true,
-// 				transaction: t,
-// 			});
-
-// 			const endMovment = await MovmentModel.findOne({
-// 				where: {
-// 					station_id: req.query.station,
-// 					date: req.query.endDate,
-// 				},
-// 				raw: true,
-// 				transaction: t,
-// 			});
-// 			if (!startMovment) {
-// 				return next(
-// 					new AppError(`لم يتم ادخال الحركة بتاريخ ${req.query.startDate}`, 500)
-// 				);
-// 			}
-// 			if (!endMovment) {
-// 				return next(
-// 					new AppError(`لم يتم ادخال الحركة بتاريخ ${req.query.endDate}`, 500)
-// 				);
-// 			}
-
-// 			const startDispenserMovment = await DispenserMovmentModel.findAll({
-// 				where: {
-// 					movment_id: startMovment.id,
-// 					shift_number: 1,
-// 					is_active: 1,
-// 				},
-// 				raw: true,
-// 				include: [
-// 					{
-// 						model: DispenserModel,
-// 						attributes: ["id", "number"],
-// 						include: [
-// 							{
-// 								model: TankModel,
-// 								attributes: ["id"],
-// 								include: [
-// 									{
-// 										model: SubstanceModel,
-// 										attributes: ["id", "name"],
-// 									},
-// 								],
-// 							},
-// 						],
-// 					},
-// 				],
-// 				order: [[{ model: DispenserModel }, "number", "ASC"]],
-// 				transaction: t,
-// 			});
-// 			const endDispenserMovment = await DispenserMovmentModel.findAll({
-// 				where: {
-// 					movment_id: endMovment.id,
-// 					shift_number: endMovment.shifts,
-// 					is_active: 1,
-// 				},
-// 				raw: true,
-// 				include: [
-// 					{
-// 						model: DispenserModel,
-// 						attributes: ["id", "number"],
-// 						include: [
-// 							{
-// 								model: TankModel,
-// 								attributes: ["id"],
-// 								include: [
-// 									{
-// 										model: SubstanceModel,
-// 										attributes: ["id", "name"],
-// 									},
-// 								],
-// 							},
-// 						],
-// 					},
-// 				],
-// 				order: [[{ model: DispenserModel }, "number", "ASC"]],
-// 				transaction: t,
-// 			});
-
-// 			startDispenserMovment.forEach((el) => {
-// 				const endDispenser = endDispenserMovment.find(
-// 					(ele) => ele.dispenser_id === el.dispenser_id
-// 				);
-// 				if (endDispenser) {
-// 					el.curr_A = endDispenser.curr_A;
-// 					el.curr_B = endDispenser.curr_B;
-// 				}
-// 			});
-
-// 			const groupedDispensers = startDispenserMovment.reduce((acc, item) => {
-// 				const existingGroup = acc.find(
-// 					(group) => group.substance_id === item["dispenser.tank.substance.id"]
-// 				);
-
-// 				if (existingGroup) {
-// 					existingGroup.data.push(item);
-// 				} else {
-// 					acc.push({
-// 						title: `حركة عدادات ال${item["dispenser.tank.substance.name"]}`,
-// 						substance_id: item["dispenser.tank.substance.id"],
-// 						data: [item],
-// 					});
-// 				}
-
-// 				return acc;
-// 			}, []);
-// 			groupedDispensers.forEach((el) => {
-// 				let total = 0;
-// 				el.data.forEach((ele) => {
-// 					total = total + ele.curr_A - ele.prev_A + ele.curr_B - ele.prev_B;
-// 					ele.total = total;
-// 				});
-// 			});
-
-// 			const station = await StationModel.findAll({
-// 				where: {
-// 					id: req.query.station,
-// 				},
-// 				raw: true,
-// 				transaction: t,
-// 			});
-
-// 			res.status(200).json({
-// 				info: {
-// 					station_name: station[0].name,
-// 					fromDate: req.query.startDate,
-// 					toDate: req.query.endDate,
-// 				},
-// 				dispensers: groupedDispensers,
-// 			});
-// 		});
-// 	} catch (error) {
-// 		return next(new AppError(error, 500));
-// 	}
-// });
 exports.getMovmentReport = catchAsync(async (req, res, next) => {
 	try {
 		let dispensersMovment = [];
 		let storesMovment = [];
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+
 			const movment = await MovmentModel.findOne({
 				where: {
 					id: req.params.id,
@@ -1345,7 +1437,22 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 });
 exports.getCalibrationReport = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const CalibrationReportModel = getModel(
+				req.headers["x-year"],
+				"calibration_report"
+			);
+			const calibrationModel = getModel(req.headers["x-year"], "calibration");
+			const calibrationMemberModel = getModel(
+				req.headers["x-year"],
+				"calibration_member"
+			);
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+
 			const calibrationReport = await CalibrationReportModel.findOne({
 				where: {
 					id: req.params.id,
@@ -1435,7 +1542,23 @@ exports.getCalibrationReport = catchAsync(async (req, res, next) => {
 exports.getEmployeeAccountStatementReport = catchAsync(
 	async (req, res, next) => {
 		try {
-			await sequelize.transaction(async (t) => {
+			await req.db.transaction(async (t) => {
+				const MovmentModel = getModel(req.headers["x-year"], "movment");
+				const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+				const DispenserMovmentModel = getModel(
+					req.headers["x-year"],
+					"dispenser_movment"
+				);
+				const TankModel = getModel(req.headers["x-year"], "tank");
+				const SubstanceModel = getModel(req.headers["x-year"], "substance");
+				const StoreModel = getModel(req.headers["x-year"], "store");
+				const OtherModel = getModel(req.headers["x-year"], "other");
+				const ReceivesModel = getModel(req.headers["x-year"], "receives");
+				const BranchWithdrawalsModel = getModel(
+					req.headers["x-year"],
+					"branch_withdrawals"
+				);
+
 				const startDate = new Date(req.query.startDate);
 				const previousDay = new Date(startDate);
 				previousDay.setDate(startDate.getDate() - 1);
@@ -1496,15 +1619,10 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 					attributes: {
 						include: [
 							[
-								Sequelize.literal(
-									"(curr_A - prev_A + curr_B - prev_B) * price"
-								),
+								req.db.literal("(curr_A - prev_A + curr_B - prev_B) * price"),
 								"cash",
 							],
-							[
-								Sequelize.literal("curr_A - prev_A + curr_B - prev_B"),
-								"amount",
-							],
+							[req.db.literal("curr_A - prev_A + curr_B - prev_B"), "amount"],
 						],
 					},
 
@@ -1527,7 +1645,7 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 					},
 					attributes: [
 						[
-							Sequelize.literal(
+							req.db.literal(
 								"SUM((curr_A - prev_A + curr_B - prev_B) * price)"
 							),
 							"cash",
@@ -1545,7 +1663,7 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 						},
 					},
 					attributes: {
-						include: [[Sequelize.literal("amount * price"), "cash"]],
+						include: [[req.db.literal("amount * price"), "cash"]],
 					},
 					include: [
 						{
@@ -1580,7 +1698,7 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 						},
 					},
 					attributes: [
-						[Sequelize.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
+						[req.db.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
 					],
 					group: ["station_id"],
 					transaction: t,
@@ -1595,7 +1713,7 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 						},
 					},
 					attributes: {
-						include: [[Sequelize.literal("amount * price"), "cash"]],
+						include: [[req.db.literal("amount * price"), "cash"]],
 					},
 					include: [
 						{
@@ -1630,7 +1748,7 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 						},
 					},
 					attributes: [
-						[Sequelize.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
+						[req.db.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
 					],
 					group: ["station_id"],
 
@@ -1648,11 +1766,11 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 					attributes: {
 						include: [
 							[
-								Sequelize.literal(`CONCAT('مقابل توريد نقدي لصندوق المحطة')`),
+								req.db.literal(`CONCAT('مقابل توريد نقدي لصندوق المحطة')`),
 								"statement",
 							],
-							[Sequelize.literal(`amount`), "creditor"],
-							[Sequelize.literal(`0`), "debtor"],
+							[req.db.literal(`amount`), "creditor"],
+							[req.db.literal(`0`), "debtor"],
 						],
 					},
 					transaction: t,
@@ -1666,7 +1784,7 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 							[Op.lt]: startDate,
 						},
 					},
-					attributes: [[Sequelize.literal("SUM(amount)"), "cash"]],
+					attributes: [[req.db.literal("SUM(amount)"), "cash"]],
 					group: ["station_id"],
 					transaction: t,
 					raw: true,
@@ -1750,11 +1868,31 @@ exports.getEmployeeAccountStatementReport = catchAsync(
 		}
 	}
 );
-
 exports.getStationAccountStatementReport = catchAsync(
 	async (req, res, next) => {
 		try {
-			await sequelize.transaction(async (t) => {
+			await req.db.transaction(async (t) => {
+				const MovmentModel = getModel(req.headers["x-year"], "movment");
+				const IncomeModel = getModel(req.headers["x-year"], "income");
+				const SubstanceModel = getModel(req.headers["x-year"], "substance");
+				const StoreModel = getModel(req.headers["x-year"], "store");
+				const SurplusModel = getModel(req.headers["x-year"], "surplus");
+				const priceMovmentEntriesModel = getModel(
+					req.headers["x-year"],
+					"price_movment_entries"
+				);
+				const BankModel = getModel(req.headers["x-year"], "bank");
+				const DepositModel = getModel(req.headers["x-year"], "deposit");
+				const StationModel = getModel(req.headers["x-year"], "station");
+				const CreditSaleSettlementModel = getModel(
+					req.headers["x-year"],
+					"credit_sale_settlement"
+				);
+				const ClientModel = getModel(req.headers["x-year"], "client");
+				const QuantityDeductionModel = getModel(
+					req.headers["x-year"],
+					"quantity_deduction"
+				);
 				const startDate = new Date(req.query.startDate);
 				const previousDay = new Date(startDate);
 				previousDay.setDate(startDate.getDate() - 1);
@@ -1779,9 +1917,10 @@ exports.getStationAccountStatementReport = catchAsync(
 					raw: true,
 					transaction: t,
 				});
+
 				const movmentsIds = movments.map((el) => el.id);
 				const prevMovmentsIds = prevMovments.map((el) => el.id);
-				//حساب جانب الدائن
+				//حساب جانب المدين
 				//الواردات
 				const incomes = await IncomeModel.findAll({
 					where: {
@@ -1792,9 +1931,9 @@ exports.getStationAccountStatementReport = catchAsync(
 					},
 					attributes: {
 						include: [
-							[Sequelize.literal(`amount * price`), "debtor"],
-							[Sequelize.literal(0), "creditor"],
-							[Sequelize.col("movment.date"), "date"],
+							[req.db.literal(`amount * price`), "debtor"],
+							[req.db.literal(0), "creditor"],
+							[req.db.col("movment.date"), "date"],
 							"price",
 						],
 					},
@@ -1828,8 +1967,8 @@ exports.getStationAccountStatementReport = catchAsync(
 					},
 					attributes: [
 						"station_id", // We want to group by station_id
-						[Sequelize.literal("SUM(price * amount)"), "debtor"], // Sum of price * amount
-						[Sequelize.literal(0), "creditor"],
+						[req.db.literal("SUM(price * amount)"), "debtor"], // Sum of price * amount
+						[req.db.literal(0), "creditor"],
 					],
 					include: [
 						{
@@ -1838,7 +1977,7 @@ exports.getStationAccountStatementReport = catchAsync(
 							where: {
 								type: "نقدي",
 							},
-							required: true, // Ensures that only records with matching type are included
+							required: true,
 						},
 					],
 					group: ["station_id"],
@@ -1855,9 +1994,9 @@ exports.getStationAccountStatementReport = catchAsync(
 					},
 					attributes: {
 						include: [
-							[Sequelize.literal(`amount * price`), "debtor"],
-							[Sequelize.literal(0), "creditor"],
-							[Sequelize.col("movment.date"), "date"],
+							[req.db.literal(`amount * price`), "debtor"],
+							[req.db.literal(0), "creditor"],
+							[req.db.col("movment.date"), "date"],
 							"price",
 						],
 					},
@@ -1890,8 +2029,8 @@ exports.getStationAccountStatementReport = catchAsync(
 					},
 					attributes: [
 						"id", // We want to group by station_id
-						[Sequelize.literal("SUM(price * amount)"), "debtor"],
-						[Sequelize.literal(0), "creditor"],
+						[req.db.literal("SUM(price * amount)"), "debtor"],
+						[req.db.literal(0), "creditor"],
 					],
 					group: ["id"],
 					transaction: t,
@@ -1908,9 +2047,9 @@ exports.getStationAccountStatementReport = catchAsync(
 					},
 					attributes: {
 						include: [
-							[Sequelize.literal(`amount`), "creditor"],
-							[Sequelize.literal(0), "debtor"],
-							[Sequelize.col("invoice_date"), "date"],
+							[req.db.literal(`amount`), "creditor"],
+							[req.db.literal(0), "debtor"],
+							[req.db.col("invoice_date"), "date"],
 						],
 					},
 					include: [
@@ -1927,43 +2066,44 @@ exports.getStationAccountStatementReport = catchAsync(
 						"en"
 					)} ريال لـ ${el["bank.name"]}`;
 				});
-				//التوريدات السابقة
-				const prevDeposits = await DepositModel.findAll({
+				//سداد المبيعات الآجلة
+				const creditSalesSettlements = await CreditSaleSettlementModel.findAll({
 					where: {
-						station_id: req.query.station,
-						invoice_date: {
-							[Op.lt]: startDate,
+						station_id: +req.query.station,
+						date: {
+							[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
 						},
+						type: "قيد مالي",
 					},
-					attributes: [
-						[Sequelize.literal("SUM(amount)"), "creditor"],
-						[Sequelize.literal(0), "debtor"],
+					include: [
+						{
+							model: StoreModel,
+							attributes: ["name"],
+							where: { type: "نقدي" },
+						},
+						{
+							model: ClientModel,
+							attributes: ["name"],
+						},
 					],
-					group: ["station_id"],
 					transaction: t,
 					raw: true,
 				});
-
-				//حساب الرصيد الافتتاحي
-				const opening = [
-					{
-						date: previousDay,
-						id: "-",
-						statement: "رصيد سابق",
-						debtor: (+prevIncomes[0]?.debtor || 0) + (+prevSurplus.debtor || 0),
-						creditor: +prevDeposits[0]?.creditor || 0,
-						balance:
-							(+prevIncomes[0]?.debtor || 0) +
-							(+prevSurplus.debtor || 0) -
-							(+prevDeposits[0]?.creditor || 0),
-					},
-				];
+				creditSalesSettlements.forEach((el) => {
+					el.statement = `سداد مبيعات آجلة لـ ${el["client.name"]} ${
+						el.type === "نقدي"
+							? "نقداً"
+							: `ب${el.type} رقم ${el.operation_number}`
+					}`;
+					el.creditor = el.amount;
+					el.debtor = 0;
+				});
 				// حساب فوارق التسعيرة
 				const priceMovmentEntries = await priceMovmentEntriesModel.findAll({
 					where: {
 						station_id: req.query.station,
 						date: {
-							[Op.gte]: startDate,
+							[Op.between]: [req.query.startDate, req.query.endDate],
 						},
 					},
 					include: [
@@ -1976,17 +2116,134 @@ exports.getStationAccountStatementReport = catchAsync(
 					transaction: t,
 					raw: true,
 				});
-
 				priceMovmentEntries.forEach((el) => {
 					el.statement = `مقابل تغير السعر من ${el.prev_price} الى ${el.curr_price} ريال لـ ${el.amount} لتر ${el["store.substance.name"]}`;
 				});
+				//حساب استنزال كمية
+				const quantityDeductions = await QuantityDeductionModel.findAll({
+					where: {
+						station_id: req.query.station,
+						date: {
+							[Op.between]: [req.query.startDate, req.query.endDate],
+						},
+					},
+					include: [
+						{
+							model: StoreModel,
+							include: [{ model: SubstanceModel, attributes: ["name"] }],
+							where: { type: "نقدي" },
+						},
+					],
+					transaction: t,
+					raw: true,
+				});
+				quantityDeductions.forEach((el) => {
+					el.statement = `مقابل استنزال ${el.amount} لتر ${el["store.substance.name"]} بسعر ${el.price}`;
+					el.creditor = el.amount * el.price;
+					el.debtor = 0;
+				});
+
+				//سدادات سابقة
+				const prevCreditSalesSettlements =
+					await CreditSaleSettlementModel.findAll({
+						where: {
+							station_id: req.query.station,
+							date: {
+								[Op.lt]: startDate,
+							},
+							type: "قيد مالي",
+						},
+						attributes: [
+							[req.db.literal("SUM(amount)"), "creditor"],
+							[req.db.literal(0), "debtor"],
+						],
+						group: ["station_id"],
+						transaction: t,
+						raw: true,
+					});
+
+				//التوريدات السابقة
+				const prevDeposits = await DepositModel.findAll({
+					where: {
+						station_id: req.query.station,
+						invoice_date: {
+							[Op.lt]: startDate,
+						},
+					},
+					attributes: [
+						[req.db.literal("SUM(amount)"), "creditor"],
+						[req.db.literal(0), "debtor"],
+					],
+					group: ["station_id"],
+					transaction: t,
+					raw: true,
+				});
+				// حساب فوارق التسعيرة السابقة
+				const prevPriceMovmentEntries = await priceMovmentEntriesModel.findAll({
+					where: {
+						station_id: req.query.station,
+						date: {
+							[Op.lt]: startDate,
+						},
+					},
+					attributes: [
+						[req.db.literal("SUM(creditor)"), "total_creditor"],
+						[req.db.literal("SUM(debtor)"), "total_debtor"],
+					],
+					group: ["station_id"],
+					transaction: t,
+					raw: true,
+				});
+				// حساب استنزال كميات السابقة
+				const prevQuantityDeduction = await QuantityDeductionModel.findAll({
+					where: {
+						station_id: req.query.station,
+						date: {
+							[Op.lt]: startDate,
+						},
+					},
+					attributes: [
+						[req.db.literal("SUM(amount*price)"), "total_creditor"],
+						[req.db.literal(0), "total_debtor"],
+					],
+					group: ["station_id"],
+					transaction: t,
+					raw: true,
+				});
+				//حساب الرصيد الافتتاحي
+				const opening = [
+					{
+						date: previousDay,
+						id: "-",
+						statement: "رصيد سابق",
+						debtor:
+							(+prevIncomes[0]?.debtor || 0) +
+							(+prevSurplus[0]?.debtor || 0) +
+							(+prevQuantityDeduction[0]?.total_debtor || 0) +
+							(+prevPriceMovmentEntries[0]?.total_debtor || 0),
+						creditor:
+							(+prevDeposits[0]?.creditor || 0) +
+							(+prevCreditSalesSettlements[0]?.creditor || 0) +
+							(+prevQuantityDeduction[0]?.total_creditor || 0) +
+							(+prevPriceMovmentEntries[0]?.total_creditor || 0),
+						balance:
+							(+prevIncomes[0]?.debtor || 0) +
+							(+prevSurplus[0]?.debtor || 0) -
+							(+prevDeposits[0]?.creditor || 0) -
+							(+prevQuantityDeduction[0]?.total_creditor || 0) +
+							(+prevPriceMovmentEntries[0]?.total_debtor || 0) -
+							(+prevCreditSalesSettlements[0]?.creditor || 0) -
+							(+prevPriceMovmentEntries[0]?.total_creditor || 0),
+					},
+				];
 				const cash = opening.concat(
 					deposits,
 					surplus,
 					incomes,
-					priceMovmentEntries
+					priceMovmentEntries,
+					creditSalesSettlements,
+					quantityDeductions
 				);
-
 				//ترتيب حسب التاريخ
 				let perioddebtor = 0;
 				let periodcreditor = 0;
@@ -2036,7 +2293,31 @@ exports.getStationAccountStatementReport = catchAsync(
 );
 exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const DepositModel = getModel(req.headers["x-year"], "deposit");
+			const BankModel = getModel(req.headers["x-year"], "bank");
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const CreditSaleSettlementModel = getModel(
+				req.headers["x-year"],
+				"credit_sale_settlement"
+			);
+			const OtherModel = getModel(req.headers["x-year"], "other");
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const BranchWithdrawalsModel = getModel(
+				req.headers["x-year"],
+				"branch_withdrawals"
+			);
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			const CalibrationModel = getModel(req.headers["x-year"], "calibration");
+			const ClientModel = getModel(req.headers["x-year"], "client");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const TankModel = getModel(req.headers["x-year"], "tank");
 			const startDate = new Date(req.query.startDate);
 			const previousDay = new Date(startDate);
 			previousDay.setDate(startDate.getDate() - 1);
@@ -2061,6 +2342,16 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 				raw: true,
 				transaction: t,
 			});
+			const stores = await StoreModel.findAll({
+				where: {
+					station_id: req.query.station,
+					type: "نقدي",
+				},
+				attributes: ["id"],
+				raw: true,
+				transaction: t,
+			});
+			const storesIds = stores.map((el) => el.id);
 			const movmentsIds = movments.map((el) => el.id);
 			const prevMovmentsIds = prevMovments.map((el) => el.id);
 			//حساب جانب المدين
@@ -2074,9 +2365,9 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 				},
 				attributes: {
 					include: [
-						[Sequelize.literal(`amount`), "debtor"],
-						[Sequelize.literal(0), "creditor"],
-						[Sequelize.col("invoice_date"), "date"],
+						[req.db.literal(`amount`), "debtor"],
+						[req.db.literal(0), "creditor"],
+						[req.db.col("invoice_date"), "date"],
 					],
 				},
 				include: [
@@ -2102,13 +2393,107 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 					},
 				},
 				attributes: [
-					[Sequelize.literal("SUM(amount)"), "creditor"],
-					[Sequelize.literal(0), "debtor"],
+					[req.db.literal("SUM(amount)"), "creditor"],
+					[req.db.literal(0), "debtor"],
 				],
 				group: ["station_id"],
 				transaction: t,
 				raw: true,
 			});
+
+			// //  سداد المبيعات الآجلة حسب المادة والحركة
+			// const creditSalesSettlementsCash =
+			// 	await CreditSaleSettlementModel.findAll({
+			// 		where: {
+			// 			station_id: req.query.station,
+			// 			date: {
+			// 				[Op.between]: [req.query.startDate, req.query.endDate],
+			// 			},
+			// 		},
+			// 		attributes: [
+			// 			"store.substance.id",
+			// 			[req.db.fn("SUM", req.db.col("amount")), "total_cash"],
+			// 		],
+			// 		include: [
+			// 			{
+			// 				model: StoreModel,
+			// 				attributes: ["type"],
+			// 				where: { type: { [Op.in]: ["نقدي", "خصم كمية"] } },
+			// 				include: [
+			// 					{
+			// 						model: SubstanceModel,
+			// 						attributes: ["id"],
+			// 					},
+			// 				],
+			// 			},
+			// 		],
+			// 		raw: true,
+			// 		transaction: t,
+			// 	});
+			// creditSalesSettlementsCash.forEach((el) => {
+			// 	el.debtor = el.amount;
+			// 	el.statement =
+			// 		`سداد مبيعات آجلة لـ ${el["client.name"]} ` +
+			// 		(el.type === "نقدي"
+			// 			? "نقداً"
+			// 			: el.type === "خصم كمية"
+			// 			? `ب${el.type}`
+			// 			: `ب${el.type} رقم ${el.operation_number}`);
+			// 	el.creditor = 0;
+			// });
+			// const prevCreditSalesSettlementsCash =
+			// 	await CreditSaleSettlementModel.findAll({
+			// 		where: {
+			// 			station_id: req.query.station,
+			// 			date: {
+			// 				[Op.lt]: startDate, // This filters for dates less than the current date
+			// 			},
+			// 		},
+			// 		attributes: [
+			// 			[req.db.literal("SUM(amount)"), "cash"], // This sums the amount * price
+			// 		],
+			// 		group: ["station_id"],
+			// 		transaction: t,
+			// 		raw: true,
+			// 	});
+			const CreditSaleSettlements = await CreditSaleSettlementModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: { [Op.in]: storesIds },
+					date: {
+						[Op.between]: [req.query.startDate, req.query.endDate],
+					},
+				},
+				include: [
+					{
+						model: ClientModel,
+						attributes: ["name"],
+					},
+				],
+
+				transaction: t,
+				raw: true,
+			});
+			CreditSaleSettlements.forEach((el) => {
+				el.creditor = el.amount;
+				el.statement = `قمية مبيعات آجلة لـ ${el["client.name"]} بتاريخ ${el.date} `;
+				el.debtor = 0;
+			});
+
+			const prevCreditSalesSettlements =
+				await CreditSaleSettlementModel.findAll({
+					where: {
+						station_id: req.query.station,
+						store_id: { [Op.in]: storesIds },
+						date: {
+							[Op.lt]: startDate,
+						},
+					},
+					attributes: [[req.db.literal("SUM(amount)"), "creditor"]],
+					group: ["station_id"],
+					transaction: t,
+					raw: true,
+				});
 			//حساب جانب الدائن
 			//فرق حركة المخازن النقدية
 			const dispensers = await DispenserMovmentModel.findAll({
@@ -2124,15 +2509,12 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 					"movment.id",
 					"price",
 					// [
-					// 	Sequelize.literal(
+					// 	req.db.literal(
 					// 		"SUM((curr_A + curr_B - prev_A - prev_B) * price)"
 					// 	),
 					// 	"creditor",
 					// ],
-					[
-						Sequelize.literal("SUM(curr_A + curr_B - prev_A - prev_B)"),
-						"amount",
-					],
+					[req.db.literal("SUM(curr_A + curr_B - prev_A - prev_B)"), "amount"],
 				],
 				include: [
 					{
@@ -2169,9 +2551,7 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 				},
 				attributes: [
 					[
-						Sequelize.literal(
-							"SUM((curr_A - prev_A + curr_B - prev_B) * price)"
-						),
+						req.db.literal("SUM((curr_A - prev_A + curr_B - prev_B) * price)"),
 						"cash",
 					],
 				],
@@ -2190,8 +2570,8 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 				attributes: [
 					"store.substance.id",
 					"movment.id",
-					[Sequelize.fn("SUM", Sequelize.col("amount")), "total_amount"],
-					[Sequelize.literal("SUM(amount * price)"), "total_cash"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(amount * price)"), "total_cash"],
 				],
 				include: [
 					{
@@ -2221,12 +2601,110 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 					},
 				},
 				attributes: [
-					[Sequelize.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
+					[req.db.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
 				],
 				group: ["station_id"],
 				transaction: t,
 				raw: true,
 			});
+			//  معايرة حسب المادة والحركة
+			const calibrationsCash = await CalibrationModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: movmentsIds,
+					},
+				},
+				attributes: [
+					"store.substance.id",
+					"movment.id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(amount * price)"), "total_cash"],
+				],
+				include: [
+					{
+						model: MovmentModel,
+						attributes: ["id", "date"],
+					},
+					{
+						model: StoreModel,
+						attributes: [],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["id"],
+							},
+						],
+					},
+				],
+				group: ["movment.id", "store.substance.id"],
+				raw: true,
+				transaction: t,
+			});
+
+			const prevCalibrationsCash = await CalibrationModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: prevMovmentsIds,
+					},
+				},
+				attributes: [
+					[req.db.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
+				],
+				group: ["station_id"],
+				transaction: t,
+				raw: true,
+			});
+			//  مبيعات آجلة حسب المادة والحركة
+			const creditSalesCash = await CreditSaleModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: movmentsIds,
+					},
+				},
+				attributes: [
+					"store.substance.id",
+					"movment.id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(amount * price)"), "total_cash"],
+				],
+				include: [
+					{
+						model: MovmentModel,
+						attributes: ["id", "date"],
+					},
+					{
+						model: StoreModel,
+						attributes: [],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["id"],
+							},
+						],
+					},
+				],
+				group: ["movment.id", "store.substance.id"],
+				raw: true,
+				transaction: t,
+			});
+			const prevCreditSalesCash = await CreditSaleModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: prevMovmentsIds,
+					},
+				},
+				attributes: [
+					[req.db.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
+				],
+				group: ["station_id"],
+				transaction: t,
+				raw: true,
+			});
+
 			//مسحوبات الفرع حسب المادة والحركة
 			const branchWithdrawalsCash = await BranchWithdrawalsModel.findAll({
 				where: {
@@ -2238,8 +2716,8 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 				attributes: [
 					"store.substance.id",
 					"movment.id",
-					[Sequelize.fn("SUM", Sequelize.col("amount")), "total_amount"],
-					[Sequelize.literal("SUM(amount * price)"), "total_cash"],
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+					[req.db.literal("SUM(amount * price)"), "total_cash"],
 				],
 				include: [
 					{
@@ -2269,7 +2747,7 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 					},
 				},
 				attributes: [
-					[Sequelize.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
+					[req.db.literal("SUM(amount * price)"), "cash"], // This sums the amount * price
 				],
 				group: ["station_id"],
 				transaction: t,
@@ -2278,9 +2756,25 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 			// حساب المبيعات النقدية فقط
 			dispensers.forEach((dispenser) => {
 				const other = othersCash.filter(
-					(el) => el["movment.id"] === dispenser["movment.id"]
+					(el) =>
+						el["movment.id"] === dispenser["movment.id"] &&
+						el["store.substance.id"] ===
+							dispenser["dispenser.tank.substance.id"]
 				)[0];
+
 				const branchWithdrawals = branchWithdrawalsCash.filter(
+					(el) =>
+						el["movment.id"] === dispenser["movment.id"] &&
+						el["store.substance.id"] ===
+							dispenser["dispenser.tank.substance.id"]
+				)[0];
+				const calibration = calibrationsCash.filter(
+					(el) =>
+						el["movment.id"] === dispenser["movment.id"] &&
+						el["store.substance.id"] ===
+							dispenser["dispenser.tank.substance.id"]
+				)[0];
+				const creditSales = creditSalesCash.filter(
 					(el) =>
 						el["movment.id"] === dispenser["movment.id"] &&
 						el["store.substance.id"] ===
@@ -2291,11 +2785,19 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 
 					dispenser.amount = +dispenser.amount - +other.total_amount;
 				}
+				if (calibration) {
+					dispenser.creditor = +dispenser.creditor - +calibration.total_cash;
+					dispenser.amount = +dispenser.amount - +calibration.total_amount;
+				}
 				if (branchWithdrawals) {
 					dispenser.creditor =
 						+dispenser.creditor - +branchWithdrawals.total_cash;
 					dispenser.amount =
 						+dispenser.amount - +branchWithdrawals.total_amount;
+				}
+				if (creditSales) {
+					dispenser.creditor = +dispenser.creditor - +creditSales.total_cash;
+					dispenser.amount = +dispenser.amount - +creditSales.total_amount;
 				}
 				dispenser.statement = `قيمة مبيعات ${dispenser.amount} لتر ${dispenser["dispenser.tank.substance.name"]} بسعر ${dispenser.price}`;
 				dispenser.creditor = +dispenser.amount * +dispenser.price;
@@ -2311,18 +2813,213 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 					statement: "رصيد سابق",
 					debtor:
 						(+prevDispensersCash[0]?.cash || 0) -
-						(+prevBranchWithdrawalsCash.cash || 0) -
-						(+prevOthersCash.cash || 0),
-					creditor: +prevDeposits[0]?.creditor || 0,
+						(+prevBranchWithdrawalsCash[0]?.cash || 0) -
+						(+prevCreditSalesCash[0]?.cash || 0) -
+						(+prevCalibrationsCash[0]?.cash || 0) -
+						(+prevOthersCash[0]?.cash || 0),
+					creditor:
+						(+prevDeposits[0]?.creditor || 0) +
+						(+prevCreditSalesSettlements[0]?.creditor || 0),
 					balance:
 						(+prevDispensersCash[0]?.cash || 0) -
-						(+prevBranchWithdrawalsCash.cash || 0) -
-						(+prevOthersCash.cash || 0) -
+						(+prevBranchWithdrawalsCash[0]?.cash || 0) -
+						(+prevCreditSalesCash[0]?.cash || 0) -
+						(+prevCalibrationsCash[0]?.cash || 0) -
+						(+prevOthersCash[0]?.cash || 0) -
+						(+prevCreditSalesSettlements[0]?.creditor || 0) -
 						(+prevDeposits[0]?.creditor || 0),
 				},
 			];
 			//ترتيب حسب التاريخ
-			const cash = opening.concat(dispensers, deposits);
+			const cash = opening.concat(dispensers, deposits, CreditSaleSettlements);
+			let perioddebtor = 0;
+			let periodcreditor = 0;
+			cash.sort((a, b) => new Date(a.date) - new Date(b.date));
+			const filterdCash = cash.filter(
+				(el) => el.creditor !== 0 || el.debtor !== 0
+			);
+			filterdCash.forEach((el, i) => {
+				if (i !== 0) {
+					perioddebtor = perioddebtor + el.debtor;
+					periodcreditor = periodcreditor + +el.creditor;
+					el.balance = filterdCash[i - 1].balance - +el.debtor + +el.creditor;
+				}
+			});
+
+			const station = await StationModel.findOne({
+				where: {
+					id: +req.query.station,
+				},
+				transaction: t,
+			});
+			const final_statment =
+				filterdCash[filterdCash.length - 1].balance > 0
+					? `دائن ${tafqeet(
+							Math.abs(filterdCash[filterdCash.length - 1].balance)
+					  )} ريال فقط لا غير`
+					: `مدين ${tafqeet(
+							Math.abs(filterdCash[filterdCash.length - 1].balance)
+					  )} ريال فقط لا غير`;
+			res.status(200).json({
+				state: "success",
+				data: {
+					cash: filterdCash,
+					info: {
+						station_name: station.name,
+						startDate: req.query.startDate,
+						endDate: req.query.endDate,
+						perioddebtor,
+						periodcreditor,
+						final_statment,
+						name: "الصندوق",
+					},
+				},
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getBranchStatementReport = catchAsync(async (req, res, next) => {
+	try {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const BranchWithdrawalsModel = getModel(
+				req.headers["x-year"],
+				"branch_withdrawals"
+			);
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const CreditSaleSettlementModel = getModel(
+				req.headers["x-year"],
+				"credit_sale_settlement"
+			);
+
+			const startDate = new Date(req.query.startDate);
+			const previousDay = new Date(startDate);
+			previousDay.setDate(startDate.getDate() - 1);
+			const movments = await MovmentModel.findAll({
+				where: {
+					station_id: req.query.station,
+					date: {
+						[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
+					},
+				},
+				raw: true,
+				transaction: t,
+			});
+
+			const prevMovments = await MovmentModel.findAll({
+				where: {
+					station_id: req.query.station,
+					date: {
+						[Op.lt]: startDate, // This filters for dates less than the current date
+					},
+				},
+				raw: true,
+				transaction: t,
+			});
+			const movmentsIds = movments.map((el) => el.id);
+			const prevMovmentsIds = prevMovments.map((el) => el.id);
+			//حساب جانب المدين
+			//مسحوبات الفرع
+			const branchwithdrawals = await BranchWithdrawalsModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: movmentsIds, // Assuming startDate and endDate are defined
+					},
+				},
+				include: [
+					{
+						model: MovmentModel,
+						attributes: ["date"],
+					},
+					{
+						model: StoreModel,
+						attributes: ["name"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["name"],
+							},
+						],
+					},
+				],
+				transaction: t,
+				raw: true,
+			});
+			branchwithdrawals.forEach((el) => {
+				el.statement = `مقابل ${el.amount} لتر ${el["store.substance.name"]} مسحوبات الفرع`;
+				el.date = el["movment.date"];
+				el.debtor = el.amount * el.price;
+				el.creditor = 0;
+			});
+			// مسحوبات الفرع السابقة
+			const prevBranchwithdrawals = await BranchWithdrawalsModel.findAll({
+				where: {
+					station_id: req.query.station,
+					movment_id: {
+						[Op.in]: prevMovmentsIds,
+					},
+				},
+				attributes: [
+					"station_id",
+					[req.db.literal("COALESCE(SUM(amount * price), 0)"), "creditor"],
+					[req.db.literal(0), "debtor"],
+				],
+				group: ["station_id"],
+				transaction: t,
+				raw: true,
+			});
+
+			//حساب جانب الدائن
+			//حساب سدادات المالية
+			const settlemts = await CreditSaleSettlementModel.findAll({
+				where: {
+					station_id: req.query.station,
+					date: {
+						[Op.between]: [req.query.startDate, req.query.endDate],
+					},
+					type: "branch",
+				},
+				transaction: t,
+				raw: true,
+			});
+			settlemts.forEach((el) => {
+				el.creditor = el.amount;
+				el.statement = `سداد مسحوبات الفرع بقيد مالي رقم ${el.id}`;
+				el.debtor = 0;
+			});
+			const prevSettlemts = await CreditSaleSettlementModel.findAll({
+				where: {
+					station_id: req.query.station,
+					date: {
+						[Op.lt]: startDate,
+					},
+					type: "branch",
+				},
+				attributes: [[req.db.literal("SUM(amount)"), "creditor"]],
+				group: ["station_id"],
+				transaction: t,
+				raw: true,
+			});
+			//حساب الرصيد الافتتاحي
+			const opening = [
+				{
+					date: previousDay,
+					id: "-",
+					statement: "رصيد سابق",
+					debtor: +prevSettlemts[0]?.debtor || 0,
+					creditor: +prevBranchwithdrawals[0]?.creditor || 0,
+					balance:
+						(+prevBranchwithdrawals[0]?.creditor || 0) -
+						(+prevSettlemts[0]?.debtor || 0),
+				},
+			];
+			//ترتيب حسب التاريخ
+			const cash = opening.concat(settlemts, branchwithdrawals);
 
 			let perioddebtor = 0;
 			let periodcreditor = 0;
@@ -2363,7 +3060,224 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 						perioddebtor,
 						periodcreditor,
 						final_statment,
-						name: "الصندوق",
+						name: "مبيعات آجلة",
+					},
+				},
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getCreditSalesStatementReport = catchAsync(async (req, res, next) => {
+	try {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			const ClientModel = getModel(req.headers["x-year"], "client");
+			const CreditSaleSettlementModel = getModel(
+				req.headers["x-year"],
+				"credit_sale_settlement"
+			);
+			const StationModel = getModel(req.headers["x-year"], "station");
+
+			const startDate = new Date(req.query.startDate);
+			const previousDay = new Date(startDate);
+			previousDay.setDate(startDate.getDate() - 1);
+			const movments = await MovmentModel.findAll({
+				where: {
+					station_id: req.query.station,
+					date: {
+						[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
+					},
+				},
+				raw: true,
+				transaction: t,
+			});
+			const store = await StoreModel.findByPk(req.query.store, {
+				include: [
+					{
+						model: SubstanceModel,
+						attributes: ["name"],
+					},
+				],
+				raw: true,
+				transaction: t,
+			});
+
+			const prevMovments = await MovmentModel.findAll({
+				where: {
+					station_id: req.query.station,
+					date: {
+						[Op.lt]: startDate, // This filters for dates less than the current date
+					},
+				},
+				raw: true,
+				transaction: t,
+			});
+			const movmentsIds = movments.map((el) => el.id);
+			const prevMovmentsIds = prevMovments.map((el) => el.id);
+			//حساب جانب الدائن
+			//مبيعات آجلة
+			const creditSales = await CreditSaleModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: req.query.store,
+					movment_id: {
+						[Op.in]: movmentsIds, // Assuming startDate and endDate are defined
+					},
+				},
+				include: [
+					{
+						model: MovmentModel,
+						attributes: ["date"],
+					},
+					{
+						model: ClientModel,
+						attributes: ["name"],
+					},
+					{
+						model: StoreModel,
+						attributes: ["name"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["name"],
+							},
+						],
+					},
+				],
+				transaction: t,
+				raw: true,
+			});
+
+			creditSales.forEach((el) => {
+				el.statement = `مقابل ${el.amount} لتر ${el["store.substance.name"]} مبيعات آجلة ل ${el["client.name"]} بسعر ${el.price}`;
+				el.date = el["movment.date"];
+				el.creditor = el.amount * el.price;
+				el.debtor = 0;
+			});
+			// مبيعات آجلة سابقة
+			const prevCreditSales = await CreditSaleModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: req.query.store,
+					movment_id: {
+						[Op.in]: prevMovmentsIds,
+					},
+				},
+				attributes: [
+					"station_id",
+					[req.db.literal("COALESCE(SUM(amount * price), 0)"), "creditor"],
+					[req.db.literal(0), "debtor"],
+				],
+				group: ["station_id"],
+				transaction: t,
+				raw: true,
+			});
+			//حساب الجانب المدين
+			//حساب سدادات المالية
+			const settlemts = await CreditSaleSettlementModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: req.query.store,
+					date: {
+						[Op.between]: [req.query.startDate, req.query.endDate],
+					},
+				},
+				include: [
+					{
+						model: ClientModel,
+						attributes: ["name"],
+					},
+				],
+				transaction: t,
+				raw: true,
+			});
+			settlemts.forEach((el) => {
+				el.debtor = el.amount;
+				el.statement =
+					`سداد مبيعات آجلة لـ ${el["client.name"]} ` +
+					(el.type === "نقدي"
+						? "نقداً"
+						: el.type === "خصم كمية"
+						? `ب${el.type}`
+						: `ب${el.type} رقم ${el.operation_number}`);
+				el.creditor = 0;
+			});
+
+			const prevSettlemts = await CreditSaleSettlementModel.findAll({
+				where: {
+					station_id: req.query.station,
+					store_id: req.query.store,
+					date: {
+						[Op.lt]: startDate,
+					},
+				},
+				attributes: [[req.db.literal("SUM(amount)"), "debtor"]],
+				group: ["station_id"],
+				transaction: t,
+				raw: true,
+			});
+			//حساب الرصيد الافتتاحي
+			const opening = [
+				{
+					date: previousDay,
+					id: "-",
+					statement: "رصيد سابق",
+					debtor: +prevSettlemts[0]?.debtor || 0,
+					creditor: +prevCreditSales[0]?.creditor || 0,
+					balance:
+						(+prevCreditSales[0]?.creditor || 0) -
+						(+prevSettlemts[0]?.debtor || 0),
+				},
+			];
+
+			//ترتيب حسب التاريخ
+			const cash = opening.concat(settlemts, creditSales);
+
+			let perioddebtor = 0;
+			let periodcreditor = 0;
+			cash.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+			cash.forEach((el, i) => {
+				if (i !== 0) {
+					perioddebtor = perioddebtor + el.debtor;
+					periodcreditor = periodcreditor + +el.creditor;
+					el.balance = cash[i - 1].balance - +el.debtor + +el.creditor;
+				}
+			});
+
+			const station = await StationModel.findOne({
+				where: {
+					id: +req.query.station,
+				},
+				transaction: t,
+			});
+
+			const final_statment =
+				cash[cash.length - 1].balance > 0
+					? `دائن ${tafqeet(
+							Math.abs(cash[cash.length - 1].balance)
+					  )} ريال فقط لا غير`
+					: `مدين ${tafqeet(
+							Math.abs(cash[cash.length - 1].balance)
+					  )} ريال فقط لا غير`;
+			res.status(200).json({
+				state: "success",
+				data: {
+					cash,
+					info: {
+						station_name: station.name,
+						store_name: `${store.name} - ${store["substance.name"]}`,
+						startDate: req.query.startDate,
+						endDate: req.query.endDate,
+						perioddebtor,
+						periodcreditor,
+						final_statment,
+						name: "مبيعات آجلة",
 					},
 				},
 			});
@@ -2374,7 +3288,30 @@ exports.getBoxAccountStatementReport = catchAsync(async (req, res, next) => {
 });
 exports.getStocktakingPriceReport = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+			const StocktakingMembersModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_members"
+			);
+			const StocktakingStoresMovmentsModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_stores_movments"
+			);
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const StoreModel = getModel(req.headers["x-year"], "store");
 			const stocktaking = await StocktakingModel.findByPk(req.params.id, {
 				raw: true,
 				include: [
@@ -2465,7 +3402,24 @@ exports.getStocktakingPriceReport = catchAsync(async (req, res, next) => {
 });
 exports.getOverview = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const StocktakingStoresMovmentsModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_stores_movments"
+			);
 			const latestMovements = await MovmentModel.findAll({
 				where: {
 					station_id: {
@@ -2497,11 +3451,17 @@ exports.getOverview = catchAsync(async (req, res, next) => {
 							station_id: movement.station_id,
 							date: movement["max_date"],
 						},
-						include: [{ model: StationModel, attributes: ["name", "number"] }],
+						include: [
+							{
+								model: StationModel,
+								attributes: ["name", "number", "province"],
+							},
+						],
 						raw: true,
 					});
 				})
 			);
+
 			const latestStoresMovments = await Promise.all(
 				latestMovementDetails.map(async (movement) => {
 					const lastShift = await MovmentsShiftsModel.findOne({
@@ -2530,7 +3490,7 @@ exports.getOverview = catchAsync(async (req, res, next) => {
 					} else {
 						return StocktakingStoresMovmentsModel.findAll({
 							where: {
-								movment_id: movement.id,
+								stocktaking_id: movement.stocktaking_id,
 							},
 							include: [
 								{
@@ -2557,13 +3517,1131 @@ exports.getOverview = catchAsync(async (req, res, next) => {
 
 				el.isUpToDate = diffDays <= 2;
 			});
-			// Sort latestMovementDetails by station number
-			latestMovementDetails.sort((a, b) => {
-				return a["station.number"] - b["station.number"];
-			});
+			let provinceData = {};
+			let provinceArray = [];
+			if (req.query.groupBy === "1") {
+				latestMovementDetails.forEach((station) => {
+					const province = station["station.province"];
+
+					if (!provinceData[province]) {
+						provinceData[province] = {
+							stations: [],
+							substances: {},
+						};
+					}
+
+					provinceData[province].stations.push({
+						id: station.id,
+						name: station["station.name"],
+						number: station["station.number"],
+						date: station.date,
+						isUpToDate: station.isUpToDate,
+					});
+
+					station.stores.forEach((store) => {
+						const substanceId = store["store.substance.id"];
+						const substanceName = store["store.substance.name"];
+						const currValue = store["curr_value"] || 0;
+						const deficit = store["deficit"] || 0;
+						const realValue = currValue - deficit;
+
+						if (!provinceData[province].substances[substanceId]) {
+							provinceData[province].substances[substanceId] = {
+								substance_name: substanceName,
+								total_curr_value: 0,
+								total_real_value: 0,
+							};
+						}
+
+						provinceData[province].substances[substanceId].total_curr_value +=
+							currValue;
+						provinceData[province].substances[substanceId].total_real_value +=
+							realValue;
+					});
+				});
+
+				// Convert to final array format
+				provinceArray = Object.entries(provinceData).map(
+					([province, data]) => ({
+						province,
+						stations: data.stations,
+						substances: Object.entries(data.substances).map(
+							([
+								substanceId,
+								{ substance_name, total_curr_value, total_real_value },
+							]) => ({
+								substance_id: substanceId,
+								substance_name,
+								total_curr_value,
+								total_real_value, // <-- Add this line for the real value
+							})
+						),
+					})
+				);
+			} else {
+				latestMovementDetails.sort((a, b) => {
+					return a["station.number"] - b["station.number"];
+				});
+				latestMovementDetails.forEach((station) => {
+					if (station.has_stocktaking) {
+						station.stores.forEach((store) => {
+							store.deficit = store.prev_value - store.curr_value;
+							store.curr_value = store.prev_value;
+						});
+					}
+				});
+			}
+
 			res.status(200).json({
 				state: "success",
-				stations: latestMovementDetails,
+				stations:
+					req.query.groupBy === "1" ? provinceArray : latestMovementDetails,
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getCreditSalesByStoreIdAndClientsIds = catchAsync(
+	async (req, res, next) => {
+		try {
+			await req.db.transaction(async (t) => {
+				const MovmentModel = getModel(req.headers["x-year"], "movment");
+				const StationModel = getModel(req.headers["x-year"], "station");
+				const SubstanceModel = getModel(req.headers["x-year"], "substance");
+				const StoreModel = getModel(req.headers["x-year"], "store");
+				const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+				const CreditSaleSettlementModel = getModel(
+					req.headers["x-year"],
+					"credit_sale_settlement"
+				);
+				const startDate = new Date(req.query.startDate);
+				const previousDay = new Date(startDate);
+				previousDay.setDate(startDate.getDate() - 1);
+				const movments = await MovmentModel.findAll({
+					where: {
+						station_id: req.query.station,
+						date: {
+							[Op.between]: [req.query.startDate, req.query.endDate], // Assuming startDate and endDate are defined
+						},
+					},
+					raw: true,
+					transaction: t,
+				});
+				const store = await StoreModel.findByPk(req.query.store, {
+					include: [
+						{
+							model: SubstanceModel,
+							attributes: ["name"],
+						},
+					],
+					raw: true,
+					transaction: t,
+				});
+				const movmentsIds = movments.map((el) => el.id);
+				const clients = req.query.clients.split(",").map(Number);
+				const creditSales = await CreditSaleModel.findAll({
+					where: {
+						station_id: req.query.station,
+						store_id: req.query.store,
+						movment_id: {
+							[Op.in]: movmentsIds,
+						},
+						client_id: {
+							[Op.in]: clients,
+						},
+					},
+					include: [
+						{
+							model: MovmentModel,
+							attributes: ["date"],
+						},
+						{
+							model: CreditSaleSettlementModel,
+							attributes: ["date"],
+						},
+					],
+					transaction: t,
+					raw: true,
+				});
+				creditSales.forEach((el) => {
+					el.value = el.amount * el.price;
+					el.isSettled = +el.isSettled;
+				});
+				creditSales.sort((a, b) => {
+					return new Date(a["movment.date"]) - new Date(b["movment.date"]);
+				});
+				const station = await StationModel.findAll({
+					where: {
+						id: req.query.station,
+					},
+					raw: true,
+					transaction: t,
+				});
+				res.status(200).json({
+					state: "success",
+					data: {
+						info: {
+							station_name: station.name,
+							store_name: `${store.name} - ${store["substance.name"]}`,
+							startDate: req.query.startDate,
+							endDate: req.query.endDate,
+							creditSales,
+						},
+					},
+				});
+			});
+		} catch (error) {
+			return next(new AppError(error, 500));
+		}
+	}
+);
+exports.getAnnualIncomes = catchAsync(async (req, res, next) => {
+	try {
+		const StoreModel = getModel(req.headers["x-year"], "store");
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const IncomeModel = getModel(req.headers["x-year"], "income");
+		const SurplusModel = getModel(req.headers["x-year"], "surplus");
+		const CalibrationModel = getModel(req.headers["x-year"], "calibration");
+		const stores = await StoreModel.findAll({
+			where: {
+				station_id: req.params.station_id,
+				// type: "نقدي",
+			},
+		});
+		const incomes = await IncomeModel.findAll({
+			attributes: [
+				[col("store.substance.id"), "substanceId"],
+				[fn("SUM", col("doc_amount")), "total"],
+			],
+			where: {
+				store_id: {
+					[Op.in]: stores.map((el) => el.id),
+				},
+			},
+			include: [
+				{
+					model: StoreModel,
+					attributes: [],
+					include: [
+						{
+							model: SubstanceModel,
+							attributes: ["id"],
+						},
+					],
+				},
+			],
+			group: ["store.substance.id"],
+			raw: true,
+		});
+		const surpleses = await SurplusModel.findAll({
+			attributes: [
+				[col("store.substance.id"), "substanceId"],
+				[fn("SUM", col("amount")), "total"],
+			],
+			where: {
+				store_id: {
+					[Op.in]: stores.map((el) => el.id),
+				},
+			},
+			include: [
+				{
+					model: StoreModel,
+					attributes: [],
+					include: [
+						{
+							model: SubstanceModel,
+							attributes: ["id"],
+						},
+					],
+				},
+			],
+			group: ["store.substance.id"],
+			raw: true,
+		});
+		const calibrations = await CalibrationModel.findAll({
+			attributes: [
+				[col("store.substance.id"), "substanceId"],
+				[fn("SUM", col("amount")), "total"],
+			],
+			where: {
+				store_id: {
+					[Op.in]: stores.map((el) => el.id),
+				},
+			},
+			include: [
+				{
+					model: StoreModel,
+					attributes: [],
+					include: [
+						{
+							model: SubstanceModel,
+							attributes: ["id"],
+						},
+					],
+				},
+			],
+			group: ["store.substance.id"],
+			raw: true,
+		});
+		const all = [...incomes, ...surpleses, ...calibrations];
+		const sums = all.reduce((acc, { substanceId, total }) => {
+			// Convert to number in case it's a string
+			const value = Number(total);
+			if (!acc[substanceId]) acc[substanceId] = 0;
+			acc[substanceId] += value;
+			return acc;
+		}, {});
+		const result = Object.entries(sums).map(([substanceId, total]) => ({
+			substanceId: Number(substanceId),
+			total,
+		}));
+
+		res.status(200).json({
+			state: "success",
+			result,
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getAnnualStoresMovment = catchAsync(async (req, res, next) => {
+	try {
+		await req.db.transaction(async (t) => {
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const QuantityDeductionModel = getModel(
+				req.headers["x-year"],
+				"quantity_deduction"
+			);
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+			const StocktakingStoresMovmentsModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_stores_movments"
+			);
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const minMovment = await MovmentModel.findOne({
+				where: {
+					station_id: req.params.station_id,
+					date: "2025-01-01",
+				},
+				raw: true,
+				transaction: t,
+			});
+			const maxMovment = await MovmentModel.findOne({
+				where: {
+					station_id: req.params.station_id,
+					date: "2025-11-23",
+				},
+				raw: true,
+				transaction: t,
+			});
+
+			const minShift = await MovmentsShiftsModel.findOne({
+				where: {
+					movment_id: minMovment.id,
+					number: 1,
+				},
+				raw: true,
+				transaction: t,
+			});
+			const maxShift = await MovmentsShiftsModel.findOne({
+				where: {
+					movment_id: maxMovment.id,
+					number: maxMovment.shifts,
+				},
+				raw: true,
+				transaction: t,
+			});
+			const minSubstanceMovment = await StoreMovmentModel.findAll({
+				where: {
+					station_id: req.params.station_id,
+					shift_id: minShift.id,
+				},
+				attributes: [
+					[col("store.substance.id"), "substanceId"],
+					[fn("SUM", col("prev_value")), "prev_value"],
+				],
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: [], // or ['id', 'name'] if you also want them in SELECT
+							},
+						],
+					},
+				],
+				group: ["store.substance.id"],
+				raw: true,
+			});
+			const maxSubstanceMovment = await StoreMovmentModel.findAll({
+				where: {
+					station_id: req.params.station_id,
+					shift_id: maxShift.id,
+				},
+				attributes: [
+					[col("store.substance.id"), "substanceId"],
+					[fn("SUM", col("curr_value")), "curr_value"],
+				],
+				include: [
+					{
+						model: StoreModel,
+						attributes: [],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: [],
+							},
+						],
+					},
+				],
+				group: ["store.substance.id"],
+				raw: true,
+			});
+
+			const quantityDeduction = await QuantityDeductionModel.findAll({
+				where: {
+					movment_id: maxMovment.id,
+				},
+				transaction: t,
+				raw: true,
+			});
+
+			const stocktaking = await StocktakingModel.findAll({
+				where: {
+					movment_id: maxMovment.id,
+				},
+				transaction: t,
+				raw: true,
+			});
+			if (quantityDeduction.length > 0) {
+				maxSubstanceMovment.forEach((el) => {
+					const deduction = quantityDeduction.filter(
+						(ele) => ele.substance_id === el.substanceId
+					)[0];
+					const amount = +deduction?.amount || 0;
+					el.curr_value = +el.curr_value - amount;
+				});
+			}
+			if (stocktaking.length > 0) {
+				const stocktakingStoresMovments =
+					await StocktakingStoresMovmentsModel.findAll({
+						where: {
+							stocktaking_id: stocktaking.id,
+						},
+						include: [
+							{
+								model: StoreModel,
+								attributes: [],
+								include: [
+									{
+										model: SubstanceModel,
+										attributes: ["id"],
+									},
+								],
+							},
+						],
+						transaction: t,
+						raw: true,
+					});
+				maxSubstanceMovment.forEach((el) => {
+					const stocktakingData = stocktakingStoresMovments.filter(
+						(ele) => ele.substance_id === el["store.substance.id"]
+					)[0];
+					const amount =
+						+stocktakingData?.curr_value ||
+						0 - +stocktakingData?.prev_value ||
+						0;
+					if (amount > 0) {
+						el.curr_value = el.curr_value + +amount;
+					}
+				});
+			}
+			res.status(200).json({
+				state: "success",
+				minSubstanceMovment,
+				maxSubstanceMovment,
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+
+exports.getAnnualStocktakingReport = catchAsync(async (req, res, next) => {
+	try {
+		await req.db.transaction(async (t) => {
+			const AnnualStocktakingModel = getModel(
+				req.headers["x-year"],
+				"annual_stocktaking"
+			);
+			const AnnualStocktakingMemberModel = getModel(
+				req.headers["x-year"],
+				"annual_stocktaking_member"
+			);
+			const AnnualStocktakingCashModel = getModel(
+				req.headers["x-year"],
+				"annual_stocktaking_cash"
+			);
+			const AnnualStocktakingTankModel = getModel(
+				req.headers["x-year"],
+				"annual_stocktaking_tank"
+			);
+			const AnnualStocktakingSurplusDeficitModel = getModel(
+				req.headers["x-year"],
+				"annual_stocktaking_surplus_deficit"
+			);
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const IncomeModel = getModel(req.headers["x-year"], "income");
+			const OtherModel = getModel(req.headers["x-year"], "other");
+			const QuantityDeductionModel = getModel(
+				req.headers["x-year"],
+				"quantity_deduction"
+			);
+
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+
+			// Get the annual stocktaking record
+			const annualStocktaking = await AnnualStocktakingModel.findOne({
+				where: {
+					id: req.params.id,
+				},
+				include: [
+					{
+						model: StationModel,
+						attributes: ["id", "name", "supervisor"],
+					},
+				],
+				transaction: t,
+			});
+
+			if (!annualStocktaking) {
+				return next(new AppError("Annual stocktaking not found", 404));
+			}
+
+			// Get members
+			const members = await AnnualStocktakingMemberModel.findAll({
+				where: {
+					annual_stocktaking_id: req.params.id,
+				},
+				transaction: t,
+				raw: true,
+			});
+
+			const groupedMembers = [];
+			for (let i = 0; i < members.length; i += 3) {
+				const group = {
+					name_1: members[i]?.name || "",
+					name_2: members[i + 1]?.name || "",
+					name_3: members[i + 2]?.name || "",
+					title_1: members[i]?.title || "",
+					title_2: members[i + 1]?.title || "",
+					title_3: members[i + 2]?.title || "",
+				};
+				groupedMembers.push(group);
+			}
+			// Get cash
+			const cash = await AnnualStocktakingCashModel.findOne({
+				where: {
+					annual_stocktaking_id: req.params.id,
+				},
+				transaction: t,
+				raw: true,
+			});
+
+			// Get tanks
+			const tanks = await AnnualStocktakingTankModel.findAll({
+				where: {
+					annual_stocktaking_id: req.params.id,
+				},
+				include: [
+					{
+						model: TankModel,
+						attributes: ["number", "capacity"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["id", "name"],
+							},
+						],
+					},
+				],
+				transaction: t,
+				raw: true,
+			});
+
+			// Get surplus/deficit
+			const surplusDeficit = await AnnualStocktakingSurplusDeficitModel.findAll(
+				{
+					where: {
+						annual_stocktaking_id: req.params.id,
+					},
+					transaction: t,
+					raw: true,
+				}
+			);
+
+			// Calculate cash total
+			const cashDenominations = [
+				{ denomination: 1000, title: "فئة ألف ريال" },
+				{ denomination: 500, title: "فئة خمسمائة ريال" },
+				{ denomination: 200, title: "فئة مائتين ريال" },
+				{ denomination: 100, title: "فئة مائة ريال" },
+				{ denomination: 50, title: "فئة خمسين ريال" },
+				{ denomination: 20, title: "فئة عشرين ريال" },
+				{ denomination: 10, title: "فئة عشرة ريال" },
+				{ denomination: 5, title: "فئة خمسة ريال" },
+				{ denomination: 1, title: "فئة ريال" },
+				{ denomination: 0, title: "عملة برونزية" },
+			];
+			let cashTotal = 0;
+			const cashDetails = cashDenominations.map((item) => {
+				const count = cash ? cash[item.denomination] || 0 : 0;
+				const value = count * item.denomination;
+				cashTotal += value;
+				return {
+					denomination: item.denomination,
+					title: item.title,
+					count: count,
+					value: value,
+				};
+			});
+
+			// Group tanks by substance
+			const groupedTanks = tanks.reduce((acc, item) => {
+				const substanceName = item["tank.substance.name"];
+				const existingGroup = acc.find(
+					(group) => group.substance === substanceName
+				);
+
+				if (existingGroup) {
+					existingGroup.data.push(item);
+					existingGroup.total_liter += +item.height_in_liter;
+				} else {
+					acc.push({
+						substance: substanceName,
+						substance_id: item["tank.substance.id"],
+						data: [item],
+						total_liter: +item.height_in_liter,
+					});
+				}
+
+				return acc;
+			}, []);
+
+			// Calculate substancesData (stores movement summary)
+			// Get all stores for the station
+			const stores = await StoreModel.findAll({
+				where: {
+					station_id: annualStocktaking.station_id,
+				},
+				include: [
+					{
+						model: SubstanceModel,
+						attributes: ["id", "name"],
+					},
+				],
+				raw: true,
+				transaction: t,
+			});
+			const storesIds = stores.map((el) => el.id);
+
+			// Calculate annual dispensers movement
+			const movments = await MovmentModel.findAll({
+				where: {
+					station_id: annualStocktaking.station_id,
+				},
+				raw: true,
+				transaction: t,
+			});
+			const movmentsIds = movments.map((el) => el.id);
+
+			// Get store movements
+			const storesMovmentsRaw = await StoreMovmentModel.findAll({
+				where: {
+					movment_id: {
+						[Op.in]: movmentsIds,
+					},
+					store_id: {
+						[Op.in]: storesIds,
+					},
+				},
+				raw: true,
+				include: [
+					{
+						model: StoreModel,
+						attributes: ["id", "name", "type"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["id", "name"],
+							},
+						],
+					},
+				],
+				transaction: t,
+			});
+
+			// Group store movements by store_id
+			const groupedStoresById = storesMovmentsRaw.reduce((acc, item) => {
+				const existingGroup = acc.find(
+					(group) => group.store_id === item.store_id
+				);
+				if (existingGroup) {
+					existingGroup.data.push(item);
+				} else {
+					acc.push({
+						store_id: item.store_id,
+						data: [item],
+					});
+				}
+				return acc;
+			}, []);
+
+			// Get incomes
+			const incomes = await IncomeModel.findAll({
+				where: {
+					station_id: annualStocktaking.station_id,
+					store_id: { [Op.in]: storesIds },
+					movment_id: { [Op.in]: movmentsIds },
+				},
+				attributes: [
+					"store_id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+				],
+				group: ["store_id"],
+				raw: true,
+				transaction: t,
+			});
+
+			// Get others
+			const others = await OtherModel.findAll({
+				where: {
+					station_id: annualStocktaking.station_id,
+					store_id: { [Op.in]: storesIds },
+					movment_id: { [Op.in]: movmentsIds },
+				},
+				attributes: [
+					"store_id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+				],
+				group: ["store_id"],
+				raw: true,
+				transaction: t,
+			});
+
+			// Get credit sales
+			const creditSales = await CreditSaleModel.findAll({
+				where: {
+					station_id: annualStocktaking.station_id,
+					store_id: { [Op.in]: storesIds },
+					movment_id: { [Op.in]: movmentsIds },
+				},
+				attributes: [
+					"store_id",
+					[req.db.fn("SUM", req.db.col("amount")), "total_amount"],
+				],
+				group: ["store_id"],
+				raw: true,
+				transaction: t,
+			});
+
+			// Calculate stores movement arr with prev/curr values
+			const storesMovmentsArr = groupedStoresById.map((group) => {
+				const dates = group.data.map((item) => {
+					const date = movments.filter((ele) => ele.id === item.movment_id)[0]
+						?.date;
+					return new Date(date);
+				});
+				const minDate = new Date(Math.min(...dates));
+				const maxDate = new Date(Math.max(...dates));
+
+				const minDateData = group.data.find((item) => {
+					const date = movments.filter((ele) => ele.id === item.movment_id)[0]
+						?.date;
+					return new Date(date).getTime() === minDate.getTime();
+				});
+
+				const maxDateData = group.data.find((item) => {
+					const date = movments.filter((ele) => ele.id === item.movment_id)[0]
+						?.date;
+					return new Date(date).getTime() === maxDate.getTime();
+				});
+
+				const incomeAmount =
+					incomes.find((el) => el.store_id === group.store_id)?.total_amount ||
+					0;
+				const othersAmount =
+					others.find((el) => el.store_id === group.store_id)?.total_amount ||
+					0;
+				const creditSalesAmount =
+					creditSales.find((el) => el.store_id === group.store_id)
+						?.total_amount || 0;
+
+				return {
+					store_id: group.store_id,
+					substance_id: maxDateData["store.substance.id"],
+					substance_name: maxDateData["store.substance.name"],
+					store_type: maxDateData["store.type"],
+					prev_value: +minDateData?.prev_value || 0,
+					curr_value: +maxDateData?.curr_value || 0,
+					income: +incomeAmount,
+					others: +othersAmount,
+					creditSales: +creditSalesAmount,
+					totalSpend:
+						+minDateData?.prev_value + +incomeAmount - +maxDateData?.curr_value,
+				};
+			});
+
+			// Calculate sums by substance
+			const sumBySubstance = storesMovmentsArr.reduce((acc, item) => {
+				const existing = acc.find(
+					(el) => el.substance_id === item.substance_id
+				);
+				if (existing) {
+					existing.income += item.income;
+					existing.prev_value += item.prev_value;
+					existing.curr_value += item.curr_value;
+					existing.total_spend += item.totalSpend;
+				} else {
+					acc.push({
+						substance_id: item.substance_id,
+						income: item.income,
+						prev_value: item.prev_value,
+						curr_value: item.curr_value,
+						total_spend: item.totalSpend,
+					});
+				}
+				return acc;
+			}, []);
+
+			// Calculate sums by substance and store type
+			const sumBySubstanceAndType = storesMovmentsArr.reduce((acc, item) => {
+				const existing = acc.find(
+					(el) =>
+						el.substance_id === item.substance_id &&
+						el.store_type === item.store_type
+				);
+				if (existing) {
+					existing.totalSpend += item.totalSpend;
+				} else {
+					acc.push({
+						substance_id: item.substance_id,
+						store_type: item.store_type,
+						totalSpend: item.totalSpend,
+					});
+				}
+				return acc;
+			}, []);
+
+			// Get all substances
+			const allSubstances = await SubstanceModel.findAll({
+				raw: true,
+				transaction: t,
+			});
+
+			// Build substancesData array
+			const substancesData = allSubstances.map((substance) => {
+				const prev_value =
+					sumBySubstance.find((el) => el.substance_id === substance.id)
+						?.prev_value || 0;
+				const curr_value =
+					sumBySubstance.find((el) => el.substance_id === substance.id)
+						?.curr_value || 0;
+				const income =
+					sumBySubstance.find((el) => el.substance_id === substance.id)
+						?.income || 0;
+				const totalCashSpend =
+					sumBySubstanceAndType.find(
+						(el) => el.substance_id === substance.id && el.store_type === "نقدي"
+					)?.totalSpend || 0;
+				const totalOthersSpend =
+					sumBySubstanceAndType.find(
+						(el) => el.substance_id === substance.id && el.store_type === "مجنب"
+					)?.totalSpend || 0;
+
+				// Get tanks total for this substance
+				const substanceTanks = groupedTanks.find(
+					(el) => el.substance_id === substance.id
+				);
+				const tanksTotalAmount = substanceTanks?.total_liter || 0;
+
+				const deficit = +tanksTotalAmount - curr_value;
+
+				// Calculate final values based on deficit
+				let finalIncome = 0;
+				let finalSpent = 0;
+				if (deficit > 0) {
+					finalIncome = deficit + income + prev_value;
+					finalSpent = totalCashSpend + totalOthersSpend;
+				} else if (deficit < 0) {
+					finalIncome = income + prev_value;
+					finalSpent = totalCashSpend + totalOthersSpend - deficit;
+				} else {
+					finalIncome = income + prev_value;
+					finalSpent = totalCashSpend + totalOthersSpend;
+				}
+
+				// Get tanks data for this substance from groupedTanks
+				const substanceTanksData = groupedTanks.find(
+					(el) => el.substance_id === substance.id
+				);
+
+				return {
+					substance_id: substance.id,
+					name: substance.name,
+					tanks: substanceTanksData?.data || [],
+					tanks_total_liter: substanceTanksData?.total_liter || 0,
+					storesMovment: [
+						{
+							num: 1,
+							title: "رصيد أول المدة",
+							income: +prev_value,
+							spent: 0,
+						},
+						{
+							num: 2,
+							title: "الوارد مشتريات",
+							income: +income,
+							spent: 0,
+						},
+						{
+							num: 3,
+							title: "ج  المبيعات العام",
+							income: 0,
+							spent: +totalCashSpend,
+						},
+						{
+							num: 4,
+							title: "منصرف أخرى",
+							income: 0,
+							spent: +totalOthersSpend,
+						},
+						{
+							num: 5,
+							title: "العجز/الفائض",
+							income: deficit > 0 ? deficit : 0,
+							spent: deficit < 0 ? Math.abs(deficit) : 0,
+						},
+						{
+							num: 6,
+							title: "الاجمالي",
+							income: finalIncome,
+							spent: finalSpent,
+						},
+						{
+							num: 8,
+							title: "الرصيد",
+							income: finalIncome - finalSpent,
+							spent: 0,
+						},
+					],
+				};
+			});
+
+			// Build substancesSummary array with curr_value, tanks value, surplus/deficit
+			const substancesSummary = allSubstances.map((substance) => {
+				const curr_value =
+					sumBySubstance.find((el) => el.substance_id === substance.id)
+						?.curr_value || 0;
+
+				// Get tanks total for this substance (check by substance_id)
+				const substanceTanks = groupedTanks.find(
+					(el) => +el.substance_id === +substance.id
+				);
+				const tanks_value = substanceTanks?.total_liter || 0;
+				// Get surplus/deficit for this substance
+				const substanceSurplusDeficit = surplusDeficit.find(
+					(el) => +el.substance_id === +substance.id
+				);
+
+				const deficitAmount = +substanceSurplusDeficit?.deficit || 0;
+				const surplusAmount = +substanceSurplusDeficit?.surplus || 0;
+				const price = +substanceSurplusDeficit?.price || 0;
+				console.log(`surplusAmount`, surplusAmount);
+				console.log(`deficitAmount`, deficitAmount);
+
+				return {
+					substance_id: substance.id,
+					substance_name: substance.name,
+					curr_value: +curr_value,
+					tanks_value: +tanks_value,
+					deficit: deficitAmount,
+					surplus: surplusAmount,
+					deficit_value: deficitAmount * price,
+					surplus_value: surplusAmount * price,
+				};
+			});
+
+			const DispensersMovments = await DispenserMovmentModel.findAll({
+				where: {
+					station_id: annualStocktaking.station_id,
+				},
+				raw: true,
+				include: [
+					{
+						model: DispenserModel,
+						attributes: ["id", "number"],
+						include: [
+							{
+								model: TankModel,
+								attributes: ["id"],
+								include: [
+									{
+										model: SubstanceModel,
+										attributes: ["id", "name"],
+									},
+								],
+							},
+						],
+					},
+				],
+				order: [[{ model: DispenserModel }, "number", "ASC"]],
+				transaction: t,
+			});
+
+			// Group dispensers by ID and calculate totals
+			const groupedDispensersById = DispensersMovments.reduce((acc, item) => {
+				const existingGroup = acc.find(
+					(group) => group.dispenser_id === item.dispenser_id
+				);
+
+				if (existingGroup) {
+					existingGroup.data.push(item);
+				} else {
+					acc.push({
+						dispenser_id: item.dispenser_id,
+						data: [item],
+					});
+				}
+
+				return acc;
+			}, []);
+
+			const dispensersMovments = groupedDispensersById.flatMap((group) => {
+				const dates = group.data.map((item) => {
+					const date = movments.filter((ele) => ele.id === item.movment_id)[0]
+						.date;
+					return new Date(date);
+				});
+				const minDate = new Date(Math.min(...dates));
+				const maxDate = new Date(Math.max(...dates));
+
+				const minDateData = group.data.find((item) => {
+					const date = movments.filter((ele) => ele.id === item.movment_id)[0]
+						.date;
+					return new Date(date).getTime() === minDate.getTime();
+				});
+
+				const maxDateData = group.data.find((item) => {
+					const date = movments.filter((ele) => ele.id === item.movment_id)[0]
+						.date;
+					return new Date(date).getTime() === maxDate.getTime();
+				});
+
+				const dispenserNumber = maxDateData["dispenser.number"];
+
+				// Return separate entries for A and B
+				return [
+					{
+						dispenser_id: maxDateData.dispenser_id,
+						name: `${dispenserNumber}A`,
+						dispenser_number: dispenserNumber,
+						side: "A",
+						prev: minDateData.prev_A,
+						curr: maxDateData.curr_A,
+						total: maxDateData.curr_A - minDateData.prev_A,
+						min_date: minDate.toISOString().split("T")[0],
+						max_date: maxDate.toISOString().split("T")[0],
+						substance_id: maxDateData["dispenser.tank.substance.id"],
+						substance_name: maxDateData["dispenser.tank.substance.name"],
+					},
+					{
+						dispenser_id: maxDateData.dispenser_id,
+						name: `${dispenserNumber}B`,
+						dispenser_number: dispenserNumber,
+						side: "B",
+						prev: minDateData.prev_B,
+						curr: maxDateData.curr_B,
+						total: maxDateData.curr_B - minDateData.prev_B,
+						min_date: minDate.toISOString().split("T")[0],
+						max_date: maxDate.toISOString().split("T")[0],
+						substance_id: maxDateData["dispenser.tank.substance.id"],
+						substance_name: maxDateData["dispenser.tank.substance.name"],
+					},
+				];
+			});
+
+			// Group dispensers by substance
+			const groupedDispensers = dispensersMovments.reduce((acc, item) => {
+				const existingGroup = acc.find(
+					(group) => group.substance_id === item.substance_id
+				);
+
+				if (existingGroup) {
+					existingGroup.data.push(item);
+					existingGroup.total += item.total;
+				} else {
+					acc.push({
+						substance: item.substance_name,
+						substance_id: item.substance_id,
+						data: [item],
+						total: item.total,
+					});
+				}
+
+				return acc;
+			}, []);
+
+			res.status(200).json({
+				state: "success",
+				data: {
+					info: {
+						id: annualStocktaking.id,
+						station_id: annualStocktaking.station_id,
+						station_name: annualStocktaking.station?.name,
+						supervisor: annualStocktaking.station?.supervisor,
+						date: `${req.headers["x-year"]}-12-31`,
+						year: req.headers["x-year"],
+					},
+					members: groupedMembers,
+					cash: {
+						details: cashDetails,
+						total: cashTotal,
+					},
+					surplusDeficit,
+					dispensers: groupedDispensers,
+					substancesData,
+					substancesSummary,
+				},
 			});
 		});
 	} catch (error) {

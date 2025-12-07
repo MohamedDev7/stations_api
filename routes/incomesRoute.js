@@ -11,6 +11,7 @@ router
 	.get(incomesController.getIncomesByMovmentIdAndShiftId);
 
 router.route("/:id").delete(incomesController.deleteIncome);
+router.route("/spicial").patch(incomesController.spicialAddIncome);
 // 	.patch(
 // 		// authController.restrictTo("editTreasury"),
 // 		substancesController.updateSubstance

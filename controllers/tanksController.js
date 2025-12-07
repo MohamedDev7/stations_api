@@ -1,10 +1,13 @@
 const catchAsync = require("../utils/catchAsync");
-const TankModel = require("./../models/tankModel");
+
 const AppError = require("../utils/appError");
-const SubstanceModel = require("../models/substanceModel");
+
+const { getModel } = require("../utils/modelSelect");
 
 exports.getTanksByStationId = catchAsync(async (req, res, next) => {
 	try {
+		const TankModel = getModel(req.headers["x-year"], "tank");
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
 		const tanks = await TankModel.findAll({
 			where: {
 				station_id: req.params.id,
@@ -21,6 +24,8 @@ exports.getTanksByStationId = catchAsync(async (req, res, next) => {
 });
 exports.updateTank = catchAsync(async (req, res, next) => {
 	try {
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+
 		await SubstanceModel.update(
 			{ name: req.body.name, price: req.body.price },
 			{

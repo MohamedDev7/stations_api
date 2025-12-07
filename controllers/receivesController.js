@@ -1,11 +1,12 @@
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/appError");
-const StationModel = require("../models/stationModel");
-const ReceivesModel = require("../models/receiveModel");
-const EmployeesModel = require("../models/employeeModel");
+const { getModel } = require("../utils/modelSelect");
 const { Sequelize } = require("sequelize");
 exports.getAllReceives = catchAsync(async (req, res, next) => {
 	try {
+		const ReceivesModel = getModel(req.headers["x-year"], "receive");
+		const StationModel = getModel(req.headers["x-year"], "station");
+		const EmployeesModel = getModel(req.headers["x-year"], "employee");
 		const receives = await ReceivesModel.findAll({
 			where: {
 				station_id: {
@@ -44,6 +45,7 @@ exports.getAllReceives = catchAsync(async (req, res, next) => {
 });
 exports.getReceive = catchAsync(async (req, res, next) => {
 	try {
+		const ReceivesModel = getModel(req.headers["x-year"], "receive");
 		const receive = await ReceivesModel.findByPk(req.params.id);
 		res.status(200).json({
 			state: "success",
@@ -56,6 +58,7 @@ exports.getReceive = catchAsync(async (req, res, next) => {
 
 exports.addReceive = catchAsync(async (req, res, next) => {
 	try {
+		const ReceivesModel = getModel(req.headers["x-year"], "receive");
 		await ReceivesModel.create({
 			date: req.body.date,
 			station_id: req.body.station,
@@ -73,6 +76,7 @@ exports.addReceive = catchAsync(async (req, res, next) => {
 });
 exports.deleteReceive = catchAsync(async (req, res, next) => {
 	try {
+		const ReceivesModel = getModel(req.headers["x-year"], "receive");
 		await ReceivesModel.destroy({
 			where: { id: req.params.id },
 		});
@@ -86,6 +90,7 @@ exports.deleteReceive = catchAsync(async (req, res, next) => {
 
 exports.updateReceive = catchAsync(async (req, res, next) => {
 	try {
+		const ReceivesModel = getModel(req.headers["x-year"], "receive");
 		await ReceivesModel.update(
 			{
 				date: req.body.date,

@@ -1,32 +1,20 @@
 const catchAsync = require("../utils/catchAsync");
-const StationModel = require("./../models/stationModel");
-const TankModel = require("./../models/tankModel");
 const sequelize = require("./../connection");
-const DispenserModel = require("./../models/dispenserModel");
-const DispenserMovmentModel = require("./../models/dispenserMovmentModel");
 const AppError = require("../utils/appError");
-const StoreModel = require("../models/storeModel");
-const StoreMovmentModel = require("../models/storeMovmentModel");
-const TankMovmentModel = require("../models/tankMovmentModel");
-const substanceModel = require("../models/substanceModel");
-const MovmentModel = require("../models/movmentModel");
-const ShiftModel = require("../models/shiftModel");
 const { Sequelize } = require("sequelize");
-const IncomeModel = require("../models/incomeModel");
-const DispenserWheelCounterMovmentModel = require("../models/dispenserWheelCounterMovmentModel");
-const SubstanceModel = require("../models/substanceModel");
-const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
 const { Op } = require("sequelize");
-const MovmentsShiftsModel = require("../models/movmentsShiftsModel");
-const { raw } = require("mysql2");
+const { getModel } = require("../utils/modelSelect");
+
 exports.getAllStations = catchAsync(async (req, res, next) => {
 	try {
+		const StationModel = getModel(req.headers["x-year"], "station");
 		const stations = await StationModel.findAll({
 			where: {
 				id: {
 					[Sequelize.Op.in]: req.stations,
 				},
 			},
+			order: [["number", "ASC"]],
 		});
 		res.status(200).json({
 			state: "success",
@@ -38,6 +26,7 @@ exports.getAllStations = catchAsync(async (req, res, next) => {
 });
 exports.getStation = catchAsync(async (req, res, next) => {
 	try {
+		const StationModel = getModel(req.headers["x-year"], "station");
 		const substance = await StationModel.findByPk(req.params.id);
 		res.status(200).json({
 			state: "success",
@@ -49,7 +38,33 @@ exports.getStation = catchAsync(async (req, res, next) => {
 });
 exports.addStation = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		const StationModel = getModel(req.headers["x-year"], "station");
+		const ShiftModel = getModel(req.headers["x-year"], "shift");
+		const SubstancePriceMovmentModel = getModel(
+			req.headers["x-year"],
+			"substance_price_movment"
+		);
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const MovmentsShiftsModel = getModel(
+			req.headers["x-year"],
+			"movments_shift"
+		);
+		const TankModel = getModel(req.headers["x-year"], "tank");
+		const TankMovmentModel = getModel(req.headers["x-year"], "tank_movment");
+		const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+		const DispenserMovmentModel = getModel(
+			req.headers["x-year"],
+			"dispenser_movment"
+		);
+		// const DispenserWheelCounterMovmentModel = getModel(
+		// 	req.headers["x-year"],
+		// 	"dispenser_wheel_counter_movment"
+		// );
+		const StoreModel = getModel(req.headers["x-year"], "store");
+		const StoreMovmentModel = getModel(req.headers["x-year"], "store_movment");
+		const IncomeModel = getModel(req.headers["x-year"], "income");
+
+		await req.db.transaction(async (t) => {
 			const substances = await SubstancePriceMovmentModel.findAll({
 				where: {
 					[Op.and]: [
@@ -91,7 +106,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 				{
 					station_id: station.id,
 					date: previousDay,
-					number: `${station.number.toString().padStart(2, "0")}${year}0000`,
+					number: `${station.number.toString().padStart(2, "0")}${year}000`,
 					state: "approved",
 					shifts: req.body.shifts.length,
 					has_stocktaking: 0,
@@ -199,12 +214,12 @@ exports.addStation = catchAsync(async (req, res, next) => {
 				};
 			});
 
-			await DispenserWheelCounterMovmentModel.bulkCreate(
-				dispensersWheelCounterMovmentsArr,
-				{
-					transaction: t,
-				}
-			);
+			// await DispenserWheelCounterMovmentModel.bulkCreate(
+			// 	dispensersWheelCounterMovmentsArr,
+			// 	{
+			// 		transaction: t,
+			// 	}
+			// );
 
 			const storesArr = req.body.stores.map((el) => {
 				return {
@@ -236,10 +251,6 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					substance_id: +el.substance_id,
 					station_id: station.id,
 					store_id: +el.id,
-					// start: shifts.filter((shift) => shift.number === highestShift)[0]
-					// 	.start,
-					// end: shifts.filter((shift) => shift.number === highestShift)[0].end,
-					// shift_number: highestShift,
 					shift_id: movmentShift.id,
 					doc_number: 0,
 					doc_amount: +el.init_stock,
@@ -256,7 +267,6 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					)[0].id,
 				};
 			});
-
 			await IncomeModel.bulkCreate(incomesArr, {
 				transaction: t,
 			});
@@ -296,6 +306,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 });
 exports.deleteStation = catchAsync(async (req, res, next) => {
 	try {
+		const StationModel = getModel(req.headers["x-year"], "station");
 		await StationModel.destroy({
 			where: { id: req.params.id },
 		});
@@ -309,6 +320,7 @@ exports.deleteStation = catchAsync(async (req, res, next) => {
 
 exports.updateStation = catchAsync(async (req, res, next) => {
 	try {
+		const StationModel = getModel(req.headers["x-year"], "station");
 		await SubstanceModel.update(
 			{ name: req.body.name, price: req.body.price },
 			{

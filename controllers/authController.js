@@ -4,14 +4,16 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/appError");
-const UserModel = require("./../models/userModel");
-const PermissionModel = require("./../models/permissionModel");
-const UserStationModel = require("../models/userStationModel");
-const StationModel = require("../models/stationModel");
-const UserDeviceModel = require("../models/userDeviceModel");
+const { getModel } = require("../utils/modelSelect");
+
 const AppVersion = process.env.APP_VERSION;
 exports.login = catchAsync(async (req, res, next) => {
 	try {
+		const UserModel = getModel(req.headers["x-year"], "user");
+		const PermissionModel = getModel(req.headers["x-year"], "permission");
+		const UserStationModel = getModel(req.headers["x-year"], "user_station");
+		const DeviceModel = getModel(req.headers["x-year"], "device");
+
 		const user = await UserModel.findOne({
 			where: {
 				username: req.body.username,
@@ -29,16 +31,16 @@ exports.login = catchAsync(async (req, res, next) => {
 		if (!user) {
 			return next(new AppError("المستخدم غير موجود", 404));
 		}
-		//check device
-		// const authDevices = await UserDeviceModel.findAll({
-		// 	where: {
+		// check device
+		const device = await DeviceModel.findOne({
+			where: {
+				device_id: req.body.deviceId,
+			},
+		});
+		// if (!device) {
+		// 	await UnauthorizedDevice.create({
 		// 		device_id: req.body.deviceId,
-		// 	},
-		// });
-		// if (
-		// 	authDevices.filter((el) => el.user_id === user.id).length === 0 &&
-		// 	user.id !== 1
-		// ) {
+		// 	});
 		// 	return next(
 		// 		new AppError(
 		// 			"لا تمتلك صلاحية الدخول من هذا الجهاز،يرجى التواصل مع تقنية المعلومات.",
@@ -46,6 +48,7 @@ exports.login = catchAsync(async (req, res, next) => {
 		// 		)
 		// 	);
 		// }
+
 		const checkPassword = bcrypt.compareSync(req.body.password, user.password);
 		if (!checkPassword) {
 			return next(new AppError("خطأ في كلمة المرور", 401));
@@ -86,6 +89,7 @@ exports.login = catchAsync(async (req, res, next) => {
 });
 
 exports.protect = catchAsync(async (req, res, next) => {
+	const UserModel = getModel(req.headers["x-year"], "user");
 	let token;
 	// if (req.headers.appversion !== AppVersion) {
 	// 	return next(new AppError("يوجد اصدار احدث للبرنامج", 401));
@@ -105,6 +109,7 @@ exports.protect = catchAsync(async (req, res, next) => {
 	const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
 
 	// Find the user based on the decoded user id
+
 	const user = await UserModel.findByPk(decoded.id);
 
 	if (!user) {
@@ -120,6 +125,9 @@ exports.protect = catchAsync(async (req, res, next) => {
 });
 exports.restrictTo = (permission) => {
 	return catchAsync(async (req, res, next) => {
+		const PermissionModel = getModel(req.headers["x-year"], "permission");
+		const UserStationModel = getModel(req.headers["x-year"], "user_station");
+
 		// Find permissions for the user
 		const permissions = await PermissionModel.findAll({
 			where: {
@@ -147,6 +155,8 @@ exports.restrictTo = (permission) => {
 };
 exports.restrictToStations = async (req, res, next) => {
 	try {
+		const StationModel = getModel(req.headers["x-year"], "station");
+		const UserStationModel = getModel(req.headers["x-year"], "user_station");
 		let stationsArr = [];
 		if (req.user.id === 1) {
 			stations = await StationModel.findAll({});

@@ -1,31 +1,43 @@
 const sequelize = require("./../connection");
-const StocktakingStoresMovmentsModel = require("../models/stocktakingStoresMovmentsModel");
-const StocktakingModel = require("../models/stocktakingModel");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/appError");
-const MovmentModel = require("../models/movmentModel");
-const StoreModel = require("../models/storeModel");
-const SubstanceModel = require("../models/substanceModel");
 const { Sequelize } = require("sequelize");
-const StationModel = require("../models/stationModel");
-const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
-const priceMovmentEntriesModel = require("../models/priceMovmentEntriesModel");
-const StocktakingMembersModel = require("../models/stocktakingMembersModel");
-const ShiftModel = require("../models/shiftModel");
-const SurplusModel = require("../models/surplusModel");
+const { getModel } = require("../utils/modelSelect");
 exports.addStocktaking = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const ShiftModel = getModel(req.headers["x-year"], "shift");
+			const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+			const StocktakingMembersModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_members"
+			);
+			const priceMovmentEntriesModel = getModel(
+				req.headers["x-year"],
+				"price_movment_entries"
+			);
+			const StocktakingStoresMovmentsModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_stores_movments"
+			);
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const SubstancePriceMovmentModel = getModel(
+				req.headers["x-year"],
+				"substance_price_movment"
+			);
+			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+
 			const [day, month, year] = req.body.date.trim().split("/");
 			const currDate = new Date(`${year}-${month}-${day}`);
 			const nextDay = new Date(currDate);
 			nextDay.setDate(currDate.getDate() + 1);
 			let lastPrice;
+
 			if (req.body.type === "تسعيرة") {
 				const lastPriceNumber = await SubstancePriceMovmentModel.max("number", {
 					where: {
 						start_date: nextDay,
-						end_date: "2100-12-31",
 						substance_id: req.body.substance,
 					},
 				});
@@ -45,7 +57,6 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 				});
 				lastPrice.prev_price = lastPrice.price;
 			}
-
 			const stocktaking = await StocktakingModel.create(
 				{
 					movment_id: req.body.currMovmentId,
@@ -72,6 +83,7 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 					stocktaking_id: stocktaking.id,
 				};
 			});
+
 			const station = await StationModel.findByPk(+req.body.station);
 			const shift = await ShiftModel.findOne({
 				where: {
@@ -86,15 +98,15 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 						station_id: +req.body.station,
 						amount: el.curr_value - el.prev_value,
 						store_id: el.store.id,
-						movment_id: el.movment_id,
-						shift_number: station.shifts,
-						start: shift.start,
-						end: shift.end,
-						price: lastPrice.prev_price,
+						// movment_id: el.movment_id,
+						// shift_number: station.shifts,
+						// start: shift.start,
+						// end: shift.end,
+						price: lastPrice.price,
 						stocktaking_id: stocktaking.id,
+						date: nextDay,
 					};
 				});
-
 			await SurplusModel.bulkCreate(surplus, { transaction: t });
 			await StocktakingStoresMovmentsModel.bulkCreate(storesArr, {
 				transaction: t,
@@ -114,7 +126,7 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 							}
 							if (el.curr_value > el.prev_value) {
 								debtor =
-									(lastPrice.price - lastPrice.prev_price) * el.curr_value;
+									(lastPrice.price - lastPrice.prev_price) * el.prev_value;
 								amount = el.curr_value;
 							} else {
 								debtor =
@@ -129,7 +141,7 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 							}
 							if (el.curr_value > el.prev_value) {
 								creditor =
-									(lastPrice.prev_price - lastPrice.price) * el.curr_value;
+									(lastPrice.prev_price - lastPrice.price) * el.prev_value;
 								amount = el.curr_value;
 							} else {
 								creditor =
@@ -179,7 +191,13 @@ exports.addStocktaking = catchAsync(async (req, res, next) => {
 });
 exports.getStocktakingByMovmentId = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const StocktakingStoresMovmentsModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_stores_movment"
+			);
 			const stores = await StocktakingStoresMovmentsModel.findAll({
 				where: {
 					movment_id: req.params.id,
@@ -208,7 +226,13 @@ exports.getStocktakingByMovmentId = catchAsync(async (req, res, next) => {
 });
 exports.getStocktakingById = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StocktakingStoresMovmentsModel = getModel(
+				req.headers["x-year"],
+				"stocktaking_stores_movment"
+			);
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
 			const stores = await StocktakingStoresMovmentsModel.findAll({
 				where: {
 					stocktaking_id: req.params.id,
@@ -237,7 +261,9 @@ exports.getStocktakingById = catchAsync(async (req, res, next) => {
 });
 exports.getAllStocktakings = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+			const StationModel = getModel(req.headers["x-year"], "station");
 			const stocktaking = await StocktakingModel.findAll({
 				where: {
 					station_id: {
@@ -275,7 +301,9 @@ exports.getAllStocktakings = catchAsync(async (req, res, next) => {
 });
 exports.deleteStocktaking = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
 			const stocktaking = await StocktakingModel.findOne({
 				where: {
 					id: req.params.id,

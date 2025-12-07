@@ -1,8 +1,9 @@
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/appError");
-const BanksModel = require("../models/bankModel");
+const { getModel } = require("../utils/modelSelect");
 
 exports.getAllBanks = catchAsync(async (req, res, next) => {
+	const BanksModel = getModel(req.headers["x-year"], "bank");
 	try {
 		const banks = await BanksModel.findAll({});
 		res.status(200).json({
@@ -13,33 +14,8 @@ exports.getAllBanks = catchAsync(async (req, res, next) => {
 		return next(new AppError(error, 500));
 	}
 });
-// exports.getEmployee = catchAsync(async (req, res, next) => {
-// 	try {
-// 		const employee = await EmployeeModel.findByPk(req.params.id);
-// 		res.status(200).json({
-// 			state: "success",
-// 			employee,
-// 		});
-// 	} catch (error) {
-// 		return next(new AppError(error, 500));
-// 	}
-// });
-// exports.getEmployeesByStationId = catchAsync(async (req, res, next) => {
-// 	try {
-// 		const employees = await EmployeeModel.findAll({
-// 			where: {
-// 				station_id: req.params.id,
-// 			},
-// 		});
-// 		res.status(200).json({
-// 			state: "success",
-// 			employees,
-// 		});
-// 	} catch (error) {
-// 		return next(new AppError(error, 500));
-// 	}
-// });
 exports.addBank = catchAsync(async (req, res, next) => {
+	const BanksModel = getModel(req.headers["x-year"], "bank");
 	try {
 		await BanksModel.create({
 			name: req.body.name,
@@ -52,6 +28,7 @@ exports.addBank = catchAsync(async (req, res, next) => {
 	}
 });
 exports.deleteBank = catchAsync(async (req, res, next) => {
+	const BanksModel = getModel(req.headers["x-year"], "bank");
 	try {
 		await BanksModel.destroy({
 			where: { id: req.params.id },
@@ -65,6 +42,7 @@ exports.deleteBank = catchAsync(async (req, res, next) => {
 });
 
 exports.updateBank = catchAsync(async (req, res, next) => {
+	const BanksModel = getModel(req.headers["x-year"], "bank");
 	try {
 		await BanksModel.update(
 			{ name: req.body.name },

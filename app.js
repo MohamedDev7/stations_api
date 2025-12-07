@@ -11,6 +11,7 @@ const dispensersRouter = require("./routes/dispensersRoute");
 const storesRouter = require("./routes/storesRoute");
 const employeesRouter = require("./routes/employeesRoute");
 const banksRouter = require("./routes/banksRoute");
+const branchWithdrawalsRouter = require("./routes/branchWithdrawalRoute");
 const depositsRouter = require("./routes/depositsRoute");
 const receivesRouter = require("./routes/receivesRoute");
 const creditSalesRouter = require("./routes/creditSalesRoute");
@@ -20,11 +21,16 @@ const surplusesRouter = require("./routes/surplusesRoute");
 const movmentsRouter = require("./routes/movmentsRoute");
 const reportsRouter = require("./routes/reportsRoute");
 const stocktakingRouter = require("./routes/stocktakingRoutes");
-
+const clientsRouter = require("./routes/clientsRoute");
+const notificationsRouter = require("./routes/notificationsRoute");
+const quantityDeductionsRouter = require("./routes/quantityDeductionsRoutes");
+const stationsClosedMonthsRouter = require("./routes/stationsClosedMonthsRoute");
+const { selectDbMiddleware } = require("./controllers/dbSelectController");
+const annualStocktakingRouter = require("./routes/annualStocktakingRoutes");
 const cors = require("cors");
 const AppError = require("./utils/appError");
 const corsOptions = {
-	origin: "http://localhost:5173",
+	origin: "*",
 	// "Access-Control-Allow-Credentials": true,
 	// optionSuccessStatus: 200,
 	credentials: false,
@@ -41,6 +47,7 @@ app.use(express.json());
 app.use("/api/v1/auth", authRouter);
 app.all("/*", authController.protect);
 app.all("/*", authController.restrictToStations);
+app.use("/*", selectDbMiddleware);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/substances", substancesRouter);
 app.use("/api/v1/stations", stationsRouter);
@@ -57,8 +64,14 @@ app.use("/api/v1/movments", movmentsRouter);
 app.use("/api/v1/stocktaking", stocktakingRouter);
 app.use("/api/v1/reports", reportsRouter);
 app.use("/api/v1/banks", banksRouter);
+app.use("/api/v1/branchWithdrawals", branchWithdrawalsRouter);
 app.use("/api/v1/deposits", depositsRouter);
 app.use("/api/v1/creditSales", creditSalesRouter);
+app.use("/api/v1/clients", clientsRouter);
+app.use("/api/v1/notifications", notificationsRouter);
+app.use("/api/v1/quantityDeductions", quantityDeductionsRouter);
+app.use("/api/v1/closing", stationsClosedMonthsRouter);
+app.use("/api/v1/annualStocktaking", annualStocktakingRouter);
 
 app.all("/*", (req, res, next) => {
 	next(new AppError(`cant find ${req.originalUrl} on this server`, 404));

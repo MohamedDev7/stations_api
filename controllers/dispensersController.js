@@ -1,21 +1,20 @@
 const catchAsync = require("../utils/catchAsync");
-const DispenserMovmentModel = require("./../models/dispenserMovmentModel");
-const MovmentModel = require("./../models/movmentModel");
+const { getModel } = require("../utils/modelSelect");
 const AppError = require("../utils/appError");
-const sequelize = require("./../connection");
-const TankModel = require("../models/tankModel");
-const DispenserModel = require("../models/dispenserModel");
-const ShiftModel = require("../models/shiftModel");
-const SubstanceModel = require("../models/substanceModel");
-const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
-const StationModel = require("../models/stationModel");
-const { Op, Sequelize } = require("sequelize");
-const DispenserWheelCounterMovmentModel = require("../models/dispenserWheelCounterMovmentModel");
+const { Op, Sequelize, fn, col } = require("sequelize");
 
 exports.getDispensersMovmentByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
-			await sequelize.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			await req.db.transaction(async (t) => {
 				const movment = await MovmentModel.findOne({
 					where: {
 						id: +req.params.id,
@@ -81,7 +80,11 @@ exports.getDispensersMovmentByMovmentIdAndShiftId = catchAsync(
 );
 exports.getAllDispensers = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+		const StationModel = getModel(req.headers["x-year"], "station");
+		const TankModel = getModel(req.headers["x-year"], "tank");
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		await req.db.transaction(async (t) => {
 			const dispensers = await DispenserModel.findAll({
 				include: [
 					{
@@ -107,7 +110,10 @@ exports.getAllDispensers = catchAsync(async (req, res, next) => {
 });
 exports.getDispensersByStationId = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
 			const dispensers = await DispenserModel.findAll({
 				where: { station_id: req.params.id, is_active: 1 },
 				include: [
@@ -130,8 +136,25 @@ exports.getDispensersByStationId = catchAsync(async (req, res, next) => {
 });
 exports.addDispenser = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
-			//check currMomvnet
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const DispenserWheelCounterMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_wheel_counter_movment"
+			);
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const SubstancePriceMovmentModel = getModel(
+				req.headers["x-year"],
+				"substance_price_movment"
+			);
 			const currMomvnet = await MovmentModel.findOne({
 				where: {
 					station_id: req.body.station_id,
@@ -142,6 +165,7 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 			if (currMomvnet) {
 				return next(new AppError(`تم ادخال الحركة بتاريخ ${req.body.date}`));
 			}
+
 			//check prevMovment
 			const currDate = new Date(req.body.date);
 			const previousDay = new Date(currDate);
@@ -162,6 +186,7 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 					)
 				);
 			}
+
 			//check prevMomvnet
 			const checkPendingMovment = await MovmentModel.findOne({
 				where: { station_id: +req.body.station_id, state: "pending" },
@@ -188,10 +213,11 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 					transaction: t,
 				}
 			);
-			const shift = await ShiftModel.findOne({
-				where: { station_id: req.body.station_id, number: prevMovment.shifts },
+			const shift = await MovmentsShiftsModel.findOne({
+				where: { station_id: req.body.station_id, movment_id: prevMovment.id },
 				transaction: t,
 			});
+
 			const substances = await SubstancePriceMovmentModel.findAll({
 				where: {
 					[Op.and]: [
@@ -201,6 +227,7 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 				},
 				raw: true,
 			});
+
 			await DispenserMovmentModel.create(
 				{
 					prev_A: +req.body.A,
@@ -209,7 +236,7 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 					curr_B: +req.body.B,
 					start: shift.start,
 					end: shift.end,
-					shift_number: prevMovment.shifts,
+					shift_id: shift.id,
 					tank_id: +req.body.tank,
 					movment_id: prevMovment.id,
 					dispenser_id: dispenser.id,
@@ -218,6 +245,8 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 						(ele) => ele.substance_id === req.body.substance
 					)[0].price,
 					is_active: 0,
+					employee_id: 0,
+					state: "saved",
 				},
 				{
 					transaction: t,
@@ -248,7 +277,9 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 });
 exports.updateDispenserState = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
 			//check pendding Movment
 			const checkPendingMovment = await MovmentModel.findOne({
 				where: { station_id: +req.body.station_id, state: "pending" },
@@ -267,6 +298,119 @@ exports.updateDispenserState = catchAsync(async (req, res, next) => {
 			);
 			res.status(200).json({
 				state: "success",
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getAnnualDispensersMovment = catchAsync(async (req, res, next) => {
+	try {
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const TankModel = getModel(req.headers["x-year"], "tank");
+		const ShiftModel = getModel(req.headers["x-year"], "shift");
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+		const DispenserMovmentModel = getModel(
+			req.headers["x-year"],
+			"dispenser_movment"
+		);
+
+		await req.db.transaction(async (t) => {
+			// Get all dispensers for this station
+			const dispensers = await DispenserModel.findAll({
+				where: { station_id: req.params.station_id },
+				raw: true,
+			});
+			const dispenserIds = dispensers.map((el) => el.id);
+
+			// For each dispenser, get min/max movement by Movment.date, with tank & substance info
+			const results = await Promise.all(
+				dispenserIds.map(async (id) => {
+					// Earliest movement
+					const minMov = await DispenserMovmentModel.findOne({
+						where: { dispenser_id: id },
+						include: [
+							{
+								model: MovmentModel,
+								attributes: ["date"], // Ensure association exists
+							},
+							{
+								model: ShiftModel,
+								attributes: ["number", "id"],
+							},
+							{
+								model: DispenserModel,
+								attributes: ["number"],
+								include: [
+									{
+										model: TankModel,
+										attributes: ["number"],
+										include: [
+											{
+												model: SubstanceModel,
+												attributes: ["name"],
+											},
+										],
+									},
+								],
+							},
+						],
+						order: [
+							[MovmentModel, "date", "ASC"], // secondary: by latest date if shifts are tied
+							[ShiftModel, "number", "ASC"], // order by maximum shift number (first match)
+						],
+						transaction: t,
+						raw: false,
+					});
+
+					// Latest movement
+					const maxMov = await DispenserMovmentModel.findOne({
+						where: { dispenser_id: id },
+						include: [
+							{
+								model: MovmentModel,
+								attributes: ["date"],
+							},
+							{
+								model: ShiftModel,
+								attributes: ["number", "id"],
+							},
+							{
+								model: DispenserModel,
+								attributes: ["number"],
+								include: [
+									{
+										model: TankModel,
+										attributes: ["number", "id"],
+										include: [
+											{
+												model: SubstanceModel,
+												attributes: ["name", "id"],
+											},
+										],
+									},
+								],
+							},
+						],
+						order: [
+							[MovmentModel, "date", "DESC"], // secondary: by latest date if shifts are tied
+							[ShiftModel, "number", "DESC"], // order by maximum shift number (first match)
+						],
+						transaction: t,
+						raw: false,
+					});
+					return {
+						dispenser_id: id,
+						min_date_movment: minMov,
+						max_date_movment: maxMov,
+					};
+				})
+			);
+
+			res.status(200).json({
+				state: "success",
+				dispensersMovments: results,
 			});
 		});
 	} catch (error) {

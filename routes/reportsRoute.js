@@ -12,6 +12,12 @@ router
 router
 	.route("/accountStatement/box")
 	.get(reportsController.getBoxAccountStatementReport);
+// router
+// 	.route("/accountStatement/branch")
+// 	.get(reportsController.getBranchStatementReport);
+router
+	.route("/accountStatement/creditSales")
+	.get(reportsController.getCreditSalesStatementReport);
 router
 	.route("/accountStatement/station")
 	.get(reportsController.getStationAccountStatementReport);
@@ -21,7 +27,9 @@ router
 router
 	.route("/incomesMovment")
 	.get(reportsController.getIncomesMovmentInPeriod);
-router.route("/creditSales").get(reportsController.getIncomesMovmentInPeriod);
+router
+	.route("/creditSales")
+	.get(reportsController.getCreditSalesByStoreIdAndClientsIds);
 router
 	.route("/depositsMovment")
 	.get(reportsController.getDepositsMovmentInPeriod);
@@ -31,4 +39,13 @@ router
 	.route("/StocktakingPrice/:id")
 	.get(reportsController.getStocktakingPriceReport);
 
+router
+	.route("/annualIncomes/:station_id")
+	.get(reportsController.getAnnualIncomes);
+router
+	.route("/annualStoresMovment/:station_id")
+	.get(reportsController.getAnnualStoresMovment);
+router
+	.route("/annualStocktaking/:id")
+	.get(reportsController.getAnnualStocktakingReport);
 module.exports = router;

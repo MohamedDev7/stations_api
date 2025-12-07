@@ -1,11 +1,23 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("./../connection");
 
-const SubstanceModel = sequelize.define("substance", {
-	name: {
-		type: DataTypes.STRING,
-		allowNull: false,
-	},
-});
+function defineSubstanceModel(sequelize) {
+	const SubstanceModel = sequelize.define("substance", {
+		name: {
+			type: DataTypes.STRING,
+			allowNull: false,
+		},
+	});
+	return SubstanceModel;
+}
+module.exports = defineSubstanceModel;
 
-module.exports = SubstanceModel;
+// const sequelize = require("./../connection");
+
+// const SubstanceModel = sequelize.define("substance", {
+// 	name: {
+// 		type: DataTypes.STRING,
+// 		allowNull: false,
+// 	},
+// });
+
+// module.exports = SubstanceModel;

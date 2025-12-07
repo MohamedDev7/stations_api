@@ -1,20 +1,23 @@
 const catchAsync = require("../utils/catchAsync");
-const SubstanceModel = require("./../models/substanceModel");
+const { getModel } = require("../utils/modelSelect");
 const AppError = require("../utils/appError");
-const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
+
 const sequelize = require("./../connection");
 const { Op, Sequelize } = require("sequelize");
-const StoreMovmentModel = require("../models/storeMovmentModel");
-const StoreModel = require("../models/storeModel");
-const MovmentsShiftsModel = require("../models/movmentsShiftsModel");
+
 exports.getAllSubstances = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const SubstancePriceMovmentModel = getModel(
+			req.headers["x-year"],
+			"substance_price_movment"
+		);
+		await req.db.transaction(async (t) => {
 			const substances = await SubstanceModel.findAll({ transaction: t });
 			const prices = await SubstancePriceMovmentModel.findAll({
 				attributes: [
 					"substance_id",
-					[sequelize.fn("max", sequelize.col("number")), "max_number"],
+					[req.db.fn("max", req.db.col("number")), "max_number"],
 				],
 				group: ["substance_id"],
 				raw: true,
@@ -31,7 +34,11 @@ exports.getAllSubstances = catchAsync(async (req, res, next) => {
 });
 exports.getSubstancesPricesByDate = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const SubstancePriceMovmentModel = getModel(
+				req.headers["x-year"],
+				"substance_price_movment"
+			);
 			const prices = await SubstancePriceMovmentModel.findAll({
 				where: {
 					[Op.and]: [
@@ -41,10 +48,22 @@ exports.getSubstancesPricesByDate = catchAsync(async (req, res, next) => {
 				},
 				raw: true,
 			});
+			const maxBySubstance = {};
+
+			prices.forEach((item) => {
+				const id = item.substance_id;
+				// If this is the first time we've seen this substance, or this item has a higher 'number'
+				if (!maxBySubstance[id] || item.number > maxBySubstance[id].number) {
+					maxBySubstance[id] = item;
+				}
+			});
+
+			// Convert the result to an array of elements
+			const result = Object.values(maxBySubstance);
 
 			res.status(200).json({
 				state: "success",
-				prices,
+				prices: result,
 			});
 		});
 	} catch (error) {
@@ -53,6 +72,11 @@ exports.getSubstancesPricesByDate = catchAsync(async (req, res, next) => {
 });
 exports.getSubstance = catchAsync(async (req, res, next) => {
 	try {
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const SubstancePriceMovmentModel = getModel(
+			req.headers["x-year"],
+			"substance_price_movment"
+		);
 		const lastPriceNumber = await SubstancePriceMovmentModel.max("number", {
 			where: { substance_id: req.params.id },
 		});
@@ -75,6 +99,12 @@ exports.getSubstance = catchAsync(async (req, res, next) => {
 exports.getSubstancesStocksByMovmentIdAndShiftID = catchAsync(
 	async (req, res, next) => {
 		try {
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
 			const stocks = await StoreMovmentModel.findAll({
 				where: {
 					movment_id: req.query.movmentId,
@@ -92,7 +122,7 @@ exports.getSubstancesStocksByMovmentIdAndShiftID = catchAsync(
 				],
 				attributes: [
 					"store.substance_id", // Include substance_id for grouping
-					[Sequelize.fn("SUM", Sequelize.col("curr_value")), "amount"],
+					[req.db.fn("SUM", req.db.col("curr_value")), "amount"],
 				],
 				group: ["store.substance_id"],
 				raw: true,
@@ -109,7 +139,12 @@ exports.getSubstancesStocksByMovmentIdAndShiftID = catchAsync(
 );
 exports.addSubstance = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const SubstancePriceMovmentModel = getModel(
+				req.headers["x-year"],
+				"substance_price_movment"
+			);
 			const substance = await SubstanceModel.create(
 				{
 					name: req.body.name,
@@ -141,6 +176,7 @@ exports.addSubstance = catchAsync(async (req, res, next) => {
 });
 exports.deleteSubstance = catchAsync(async (req, res, next) => {
 	try {
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
 		await SubstanceModel.destroy({
 			where: { id: req.params.id },
 		});
@@ -153,6 +189,7 @@ exports.deleteSubstance = catchAsync(async (req, res, next) => {
 });
 exports.updateSubstance = catchAsync(async (req, res, next) => {
 	try {
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
 		await SubstanceModel.update(
 			{ name: req.body.name },
 			{
@@ -167,6 +204,11 @@ exports.updateSubstance = catchAsync(async (req, res, next) => {
 	}
 });
 exports.updateSubstancePrice = catchAsync(async (req, res, next) => {
+	const SubstancePriceMovmentModel = getModel(
+		req.headers["x-year"],
+		"substance_price_movment"
+	);
+
 	const lastPriceNumber = await SubstancePriceMovmentModel.max("number", {
 		where: { substance_id: req.params.id },
 	});
@@ -177,7 +219,7 @@ exports.updateSubstancePrice = catchAsync(async (req, res, next) => {
 	const previousDay = new Date(currDate);
 	previousDay.setDate(currDate.getDate() - 1);
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
 			await SubstancePriceMovmentModel.update(
 				{
 					end_date: previousDay,
@@ -209,13 +251,17 @@ exports.updateSubstancePrice = catchAsync(async (req, res, next) => {
 });
 exports.getSubstancePriceMovment = catchAsync(async (req, res, next) => {
 	try {
+		const SubstancePriceMovmentModel = getModel(
+			req.headers["x-year"],
+			"substance_price_movment"
+		);
 		const currDate = new Date(req.query.date);
 		const nextDay = new Date(currDate);
 		nextDay.setDate(currDate.getDate() + 1);
 		const PriceMovment = await SubstancePriceMovmentModel.findAll({
 			where: {
 				start_date: nextDay,
-				end_date: "2100-12-31",
+				// end_date: "2100-12-31",
 				substance_id: { [Op.in]: req.query.substanceIds.split(",") },
 			},
 		});

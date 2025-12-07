@@ -4,8 +4,19 @@ const creditSalesController = require("./../controllers/creditSalesController");
 const router = express.Router();
 router.route("").get(creditSalesController.getAllCreditSales);
 router
+	.route("/store/client/:stationId/:storeId/:clientId")
+	.get(
+		creditSalesController.getUnPaidCreditSalesByStationIdAndStoreIdAndClientId
+	);
+router
 	.route("/settlements")
-	.get(creditSalesController.getAllCreditSalesSettlements);
+	.get(creditSalesController.getAllCreditSalesSettlements)
+	.post(creditSalesController.addCreditSalesSettlement);
+
+router
+	.route("/settlements/:id")
+
+	.delete(creditSalesController.deleteCreditSalesSettlement);
 
 // router.route("/station/:id").get(
 // 	// authController.restrictTo("editEmployee"),

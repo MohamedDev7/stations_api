@@ -1,54 +1,45 @@
 const catchAsync = require("../utils/catchAsync");
-const MovmentModel = require("./../models/movmentModel");
 const sequelize = require("./../connection");
 const AppError = require("../utils/appError");
-const StationModel = require("../models/stationModel");
-const DispenserMovmentModel = require("../models/dispenserMovmentModel");
-const IncomeModel = require("../models/incomeModel");
-const StoreMovmentModel = require("../models/storeMovmentModel");
-const OtherModel = require("../models/otherModel");
 const { Sequelize, Op, where } = require("sequelize");
-const StoreModel = require("../models/storeModel");
-const SubstanceModel = require("../models/substanceModel");
-const DispenserModel = require("../models/dispenserModel");
-const TankModel = require("../models/tankModel");
-const calibrationModel = require("../models/calibrationModel");
-const calibrationMemberModel = require("../models/calibrationMemberModel");
-const StoresTransferModel = require("../models/storesTransferModel");
-const SurplusModel = require("../models/surplusModel");
-const BranchWithdrawalsModel = require("../models/branchWithdrawalsModel");
-const MovmentsShiftsModel = require("../models/movmentsShiftsModel");
-const ShiftModel = require("../models/shiftModel");
+const { getModel } = require("../utils/modelSelect");
 const notificationQueue = require("../queues/notificationQueue");
-const PermissionModel = require("../models/permissionModel");
-const UserModel = require("../models/userModel");
-const UserStationModel = require("../models/userStationModel");
-const CreditSaleModel = require("../models/creditSaleModel");
-const SubstancePriceMovmentModel = require("../models/substancePriceMovmentModel");
-const StocktakingModel = require("../models/stocktakingModel");
+
 exports.getAllMovments = catchAsync(async (req, res, next) => {
 	try {
-		const filters = JSON.parse(req.query.filters);
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const StationModel = getModel(req.headers["x-year"], "station");
+		const MovmentsShiftsModel = getModel(
+			req.headers["x-year"],
+			"movments_shift"
+		);
+		const stations = req.query.stations
+			? req.query.stations.split(",").filter((s) => s.length > 0)
+			: [];
 		const whereConditions = {
 			station_id: {
-				[Sequelize.Op.in]:
-					filters.stations.length > 0 ? filters.stations : req.stations,
+				[Sequelize.Op.in]: stations.length > 0 ? stations : req.stations,
 			},
 		};
-
-		if (filters.startDate && filters.endDate) {
+		if (
+			req.query.startDate &&
+			req.query.startDate !== "null" &&
+			req.query.endDate &&
+			req.query.endDate !== "null"
+		) {
 			whereConditions.date = {
-				[Sequelize.Op.between]: [filters.startDate, filters.endDate],
+				[Sequelize.Op.between]: [req.query.startDate, req.query.endDate],
 			};
-		} else if (filters.startDate) {
+		} else if (req.query.startDate && req.query.startDate !== "null") {
 			whereConditions.date = {
-				[Sequelize.Op.gte]: filters.startDate,
+				[Sequelize.Op.gte]: req.query.startDate,
 			};
-		} else if (filters.endDate) {
+		} else if (req.query.endDate && req.query.endDate !== "null") {
 			whereConditions.date = {
-				[Sequelize.Op.lte]: filters.endDate,
+				[Sequelize.Op.lte]: req.query.endDate,
 			};
 		}
+
 		const movments = await MovmentModel.findAll({
 			where: whereConditions,
 			raw: true,
@@ -127,8 +118,40 @@ exports.getAllMovments = catchAsync(async (req, res, next) => {
 		return next(new AppError(error, 500));
 	}
 });
+exports.getOthersByMovmentIdAndShiftId = catchAsync(async (req, res, next) => {
+	try {
+		const OtherModel = getModel(req.headers["x-year"], "other");
+		const StoreModel = getModel(req.headers["x-year"], "store");
+		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const others = await OtherModel.findAll({
+			where: {
+				movment_id: req.params.movment_id,
+				shift_id: req.params.shift_id,
+			},
+			include: [
+				{
+					model: StoreModel,
+					attributes: ["name", "id"],
+					include: [
+						{
+							model: SubstanceModel,
+							attributes: ["id", "name"],
+						},
+					],
+				},
+			],
+		});
+		res.status(200).json({
+			state: "success",
+			others,
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
 exports.getMovmentsByStationId = catchAsync(async (req, res, next) => {
 	try {
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
 		const movments = await MovmentModel.findAll({
 			where: {
 				station_id: req.params.id,
@@ -144,7 +167,8 @@ exports.getMovmentsByStationId = catchAsync(async (req, res, next) => {
 });
 exports.getStationMovment = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		await req.db.transaction(async (t) => {
 			const movment = await MovmentModel.findOne({
 				where: {
 					station_id: +req.params.station_id,
@@ -163,10 +187,14 @@ exports.getStationMovment = catchAsync(async (req, res, next) => {
 		return next(new AppError(error, 500));
 	}
 });
-
 exports.getStationMovmentByDate = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const MovmentsShiftsModel = getModel(
+			req.headers["x-year"],
+			"movments_shift"
+		);
+		await req.db.transaction(async (t) => {
 			const movment = await MovmentModel.findOne({
 				where: {
 					station_id: +req.params.id,
@@ -200,6 +228,7 @@ exports.getStationMovmentByDate = catchAsync(async (req, res, next) => {
 });
 exports.getStationPendingMovment = catchAsync(async (req, res, next) => {
 	try {
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
 		const pendingMovment = await MovmentModel.findAll({
 			where: { station_id: +req.params.id, state: "pending" },
 			order: [["createdAt", "DESC"]],
@@ -217,12 +246,27 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 	const previousDay = new Date(currDate);
 	previousDay.setDate(currDate.getDate() - 1);
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const SubstancePriceMovmentModel = getModel(
+				req.headers["x-year"],
+				"substance_price_movment"
+			);
+			const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+			const ShiftModel = getModel(req.headers["x-year"], "shift");
+			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+
 			const station = await StationModel.findOne({
 				where: {
 					id: req.body.station_id,
 				},
 			});
+
 			//check currMomvnet
 			const currMomvnet = await MovmentModel.findOne({
 				where: {
@@ -242,6 +286,7 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 			if (checkPendingMovment) {
 				return next(new AppError("لم يتم تأكيد حركة اليوم السابق", 500));
 			}
+
 			const prevMovment = await MovmentModel.findOne({
 				where: {
 					station_id: req.body.station_id,
@@ -259,9 +304,11 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 			const priceMovment = await SubstancePriceMovmentModel.findAll({
 				where: {
 					start_date: req.body.date,
+					type: "تحريك تسعيرة",
 				},
 				raw: true,
 			});
+
 			if (priceMovment.length > 0) {
 				// Check if each price movement has a stocktaking
 				for (const movement of priceMovment) {
@@ -275,7 +322,6 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 							curr_price: movement.price,
 						},
 					});
-
 					if (!hasStocktaking) {
 						return next(
 							new AppError(
@@ -290,6 +336,7 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 					}
 				}
 			}
+
 			const movment = await MovmentModel.create(
 				{
 					station_id: req.body.station_id,
@@ -299,8 +346,9 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 					state: "pending",
 					has_stocktaking: 0,
 				},
-				{ transaction: t }
+				{ transaction: t, raw: true }
 			);
+
 			const shifts = ShiftModel.findAll({
 				where: { station_id: req.body.station_id },
 				raw: true,
@@ -315,7 +363,37 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 					state: "inserted",
 				};
 			});
-			await MovmentsShiftsModel.bulkCreate(shiftsArr, { transaction: t });
+			const shiftss = await MovmentsShiftsModel.bulkCreate(shiftsArr, {
+				transaction: t,
+			});
+
+			//link stocktacking surplus if exists
+			const surplus = await SurplusModel.findAll({
+				where: {
+					station_id: req.body.station_id,
+					date: currDate,
+					movment_id: null,
+					shift_id: null,
+				},
+				raw: true,
+			});
+
+			if (surplus.length > 0) {
+				await SurplusModel.update(
+					{
+						movment_id: movment.id,
+					},
+					{
+						where: {
+							id: {
+								[Op.in]: surplus.map((el) => el.id),
+							},
+						},
+						transaction: t,
+					}
+				);
+			}
+
 			res.status(200).json({
 				state: "success",
 			});
@@ -326,7 +404,22 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 });
 exports.addShiftMovment = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		const MovmentsShiftsModel = getModel(
+			req.headers["x-year"],
+			"movments_shift"
+		);
+		await req.db.transaction(async (t) => {
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const OtherModel = getModel(req.headers["x-year"], "other");
+
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
 			const dispensersMovmentsArr = req.body.dispensers.map((el) => {
 				return {
 					prev_A: +el.prev_A,
@@ -382,13 +475,14 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 				};
 			});
 			await OtherModel.bulkCreate(othersArr, { transaction: t });
+
 			const creditSalesArr = req.body.creditSales.map((el) => {
 				return {
 					station_id: +req.body.station_id,
 					movment_id: +req.body.movment_id,
 					shift_id: req.body.shift.id,
-					from_store: el.store,
-					beneficiary_store: el.beneficiary,
+					store_id: +el.store,
+					client_id: +el.client,
 					amount: el.amount,
 					title: el.title,
 					price: el.substance.price,
@@ -397,28 +491,29 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 			});
 
 			await CreditSaleModel.bulkCreate(creditSalesArr, { transaction: t });
-			const branchWithdrawalsArr = req.body.coupons.map((el) => {
-				return {
-					station_id: +req.body.station_id,
-					movment_id: +req.body.movment_id,
-					shift_id: req.body.shift.id,
-					store_id: el.store,
-					store_movment_id: storesMovments.filter(
-						(ele) => ele.store_id === el.store
-					)[0].id,
-					amount: +el.amount,
-					type: el.type,
-					shift_id: req.body.shift.id,
-					price: el.substance.price,
-					employee_id: el.employee_id,
-				};
-			});
-			await BranchWithdrawalsModel.bulkCreate(branchWithdrawalsArr, {
-				transaction: t,
-			});
+
+			// const branchWithdrawalsArr = req.body.coupons.map((el) => {
+			// 	return {
+			// 		station_id: +req.body.station_id,
+			// 		movment_id: +req.body.movment_id,
+			// 		shift_id: req.body.shift.id,
+			// 		store_id: el.store,
+			// 		store_movment_id: storesMovments.filter(
+			// 			(ele) => ele.store_id === el.store
+			// 		)[0].id,
+			// 		amount: +el.amount,
+			// 		type: el.type,
+			// 		shift_id: req.body.shift.id,
+			// 		price: el.substance.price,
+			// 		employee_id: el.employee_id,
+			// 	};
+			// });
+			// await BranchWithdrawalsModel.bulkCreate(branchWithdrawalsArr, {
+			// 	transaction: t,
+			// });
+			//update movment shift state
 		});
-		//update movment shift state
-		MovmentsShiftsModel.update(
+		await MovmentsShiftsModel.update(
 			{ state: req.body.state },
 			{ where: { id: req.body.shift.id } }
 		);
@@ -431,7 +526,433 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 });
 exports.editShiftMovment = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const OtherModel = getModel(req.headers["x-year"], "other");
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			const currDate = new Date(req.body.date);
+			const nextDay = new Date(req.body.date);
+			nextDay.setDate(currDate.getDate() + 1);
+			//update despensers
+			//update curr shift
+			for (const { id, curr_A, curr_B, price, employee_id } of req.body
+				.dispensers) {
+				await DispenserMovmentModel.update(
+					{
+						curr_A: curr_A,
+						curr_B: curr_B,
+						price: price,
+						employee_id: employee_id,
+						state: req.body.state,
+					},
+					{
+						where: { id: id },
+						transaction: t, // Condition to match the record by 'id'
+					}
+				);
+			}
+
+			//get next shift
+			const currMovment = await MovmentModel.findByPk(req.body.movment_id, {
+				raw: true,
+			});
+
+			if (currMovment.shifts > req.body.shift.number) {
+				for (const { curr_A, curr_B, dispenser } of req.body.dispensers) {
+					const { id } = dispenser;
+					const nextShift = await MovmentsShiftsModel.findOne({
+						where: {
+							movment_id: currMovment.id,
+							number: req.body.shift.number + 1,
+							station_id: req.body.station_id,
+						},
+						raw: true,
+					});
+					await DispenserMovmentModel.update(
+						{
+							prev_A: curr_A,
+							prev_B: curr_B,
+						},
+						{
+							where: {
+								dispenser_id: id,
+								shift_id: nextShift.id,
+								movment_id: req.body.movment_id,
+							},
+							transaction: t,
+						}
+					);
+				}
+			} else {
+				const nextMovment = await MovmentModel.findOne({
+					where: { date: nextDay, station_id: req.body.station_id },
+					raw: true,
+				});
+				if (nextMovment) {
+					for (const { curr_A, curr_B, dispenser } of req.body.dispensers) {
+						const { id } = dispenser;
+						const nextShift = await MovmentsShiftsModel.findOne({
+							where: {
+								movment_id: nextMovment.id,
+								number: 1,
+							},
+							raw: true,
+						});
+						await DispenserMovmentModel.update(
+							{
+								prev_A: curr_A,
+								prev_B: curr_B,
+							},
+							{
+								where: {
+									dispenser_id: id,
+									shift_id: nextShift.id,
+									movment_id: nextMovment.id,
+								},
+								transaction: t,
+							}
+						);
+					}
+				}
+			}
+
+			//update stores
+			//update curr shift
+			for (const { id, curr_value, price } of req.body.currStoresMovments) {
+				await StoreMovmentModel.update(
+					{
+						curr_value: curr_value,
+						price: price,
+						state: req.body.state,
+					},
+					{
+						where: { id: id },
+						transaction: t, // Condition to match the record by 'id'
+					}
+				);
+			}
+
+			//update next shifts
+			const nextMovments = await MovmentModel.findAll({
+				where: {
+					station_id: req.body.station_id,
+					date: {
+						[Op.gt]: currDate, // Find all records where the date is greater than currDate
+					},
+				},
+				attributes: ["id"], // Only select the 'id' field
+				raw: true, // Return raw data (plain object)
+			});
+
+			if (currMovment.shifts > req.body.shift.number) {
+				for (const { old_curr_value, curr_value, store_id } of req.body
+					.currStoresMovments) {
+					const diff = curr_value - old_curr_value;
+					const nextShifts = await MovmentsShiftsModel.findAll({
+						where: {
+							movment_id: currMovment.id,
+							number: {
+								[Op.gt]: req.body.shift.number,
+							},
+						},
+						raw: true,
+					});
+					const shiftsIds = nextShifts.map((el) => el.id);
+					await StoreMovmentModel.update(
+						{
+							prev_value: req.db.literal(`prev_value + ${diff}`),
+							curr_value: req.db.literal(`curr_value + ${diff}`),
+						},
+						{
+							where: {
+								store_id: store_id,
+								shift_id: {
+									[Op.in]: shiftsIds,
+								},
+								movment_id: req.body.movment_id,
+							},
+							transaction: t,
+						}
+					);
+				}
+			}
+
+			if (nextMovments.length > 0) {
+				const nextMovmentsIds = nextMovments.map((el) => el.id);
+				for (const { old_curr_value, curr_value, store_id } of req.body
+					.currStoresMovments) {
+					const diff = curr_value - old_curr_value;
+					await StoreMovmentModel.update(
+						{
+							prev_value: req.db.literal(`prev_value + ${diff}`),
+							curr_value: req.db.literal(`curr_value + ${diff}`),
+						},
+						{
+							where: {
+								store_id: store_id,
+								movment_id: {
+									[Op.in]: nextMovmentsIds,
+								},
+							},
+							transaction: t,
+						}
+					);
+				}
+			}
+
+			//updating others
+			let othersToAdd = [];
+			let othersToEdit = [];
+			let othersToDelete = [];
+			req.body.others.forEach((el) => {
+				if (el.db_id) {
+					othersToEdit.push({
+						store_id: el.store,
+						store_movment_id: req.body.currStoresMovments.filter(
+							(ele) => ele.store_id === el.store
+						)[0].id,
+						amount: +el.amount,
+						type: el.type,
+						price: el.price,
+						title: el.title,
+						employee_id: el.employee_id,
+						db_id: el.db_id,
+					});
+				}
+				if (!el.db_id) {
+					othersToAdd.push({
+						station_id: +req.body.station_id,
+						movment_id: +req.body.movment_id,
+						shift_id: req.body.shift.id,
+						store_id: el.store,
+						store_movment_id: req.body.currStoresMovments.filter(
+							(ele) => ele.store_id === el.store
+						)[0].id,
+						amount: +el.amount,
+						type: el.type,
+						title: el.title,
+
+						price: el.substance.price,
+						employee_id: el.employee_id,
+					});
+				}
+			});
+
+			const dbOthers = await OtherModel.findAll({
+				where: {
+					movment_id: req.body.movment_id,
+					shift_id: req.body.shift.id,
+				},
+				raw: true,
+			});
+
+			othersToDelete = dbOthers.filter(
+				(dbOther) =>
+					!req.body.others
+						.filter((el) => el.db_id)
+						.some((reqOther) => reqOther.db_id === dbOther.id)
+			);
+			const othersToDeleteIds = othersToDelete.map((el) => el.id);
+			const updateOthersPromises = othersToEdit.map((el) => {
+				return OtherModel.update(el, {
+					where: { id: el.db_id },
+					transaction: t,
+				});
+			});
+			await Promise.all(updateOthersPromises);
+
+			await OtherModel.destroy({
+				where: {
+					id: {
+						[Op.in]: othersToDeleteIds,
+					},
+				},
+				transaction: t,
+			});
+
+			await OtherModel.bulkCreate(othersToAdd, {
+				transaction: t,
+			});
+			//updating credit sales
+			let creditSalesToAdd = [];
+			let creditSalesToEdit = [];
+			let creditSalesToDelete = [];
+
+			req.body.creditSales.forEach((el) => {
+				if (el.db_id) {
+					creditSalesToEdit.push({
+						store_id: el.store,
+						client_id: el.client,
+						amount: +el.amount,
+						price: el.price,
+						title: el.title,
+						db_id: el.db_id,
+						employee_id: el.employee_id,
+					});
+				}
+
+				if (!el.db_id) {
+					creditSalesToAdd.push({
+						station_id: +req.body.station_id,
+						movment_id: +req.body.movment_id,
+						shift_id: req.body.shift.id,
+						store_id: el.store,
+						client_id: el.client,
+						amount: +el.amount,
+						title: el.title,
+						price: el.substance.price,
+						employee_id: el.employee_id,
+					});
+				}
+			});
+
+			const dbCreditSales = await CreditSaleModel.findAll({
+				where: {
+					movment_id: req.body.movment_id,
+					shift_id: req.body.shift.id,
+				},
+				raw: true,
+			});
+
+			creditSalesToDelete = dbCreditSales.filter(
+				(dbCreditSale) =>
+					!req.body.creditSales
+						.filter((el) => el.db_id)
+						.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id)
+			);
+
+			const creditSaleToDeleteIds = creditSalesToDelete.map((el) => el.id);
+
+			const updateCreditSalesPromises = creditSalesToEdit.map((el) => {
+				return CreditSaleModel.update(el, {
+					where: { id: el.db_id },
+					transaction: t,
+				});
+			});
+
+			await Promise.all(updateCreditSalesPromises);
+
+			await CreditSaleModel.destroy({
+				where: {
+					id: {
+						[Op.in]: creditSaleToDeleteIds,
+					},
+				},
+				transaction: t,
+			});
+
+			await CreditSaleModel.bulkCreate(creditSalesToAdd, {
+				transaction: t,
+			});
+			// //updating coupons
+			// let couponsToAdd = [];
+			// let couponsToEdit = [];
+			// let couponsToDelete = [];
+			// req.body.coupons.forEach((el) => {
+			// 	if (el.db_id) {
+			// 		couponsToEdit.push({
+			// 			station_id: +req.body.station_id,
+			// 			movment_id: +req.body.movment_id,
+			// 			store_id: el.store,
+			// 			store_movment_id: req.body.currStoresMovments.filter(
+			// 				(ele) => ele.store_id === el.store
+			// 			)[0].id,
+			// 			amount: +el.amount,
+			// 			type: el.type,
+			// 			price: el.price,
+			// 			employee_id: el.employee_id,
+			// 			db_id: el.db_id,
+			// 		});
+			// 	}
+			// 	if (!el.db_id) {
+			// 		couponsToAdd.push({
+			// 			station_id: +req.body.station_id,
+			// 			movment_id: +req.body.movment_id,
+			// 			shift_id: req.body.shift.id,
+			// 			store_id: el.store,
+			// 			store_movment_id: req.body.currStoresMovments.filter(
+			// 				(ele) => ele.store_id === el.store
+			// 			)[0].id,
+			// 			amount: +el.amount,
+			// 			type: el.type,
+
+			// 			price: el.substance.price,
+			// 			employee_id: el.employee_id,
+			// 		});
+			// 	}
+			// });
+
+			// const dbCoupons = await BranchWithdrawalsModel.findAll({
+			// 	where: {
+			// 		movment_id: req.body.movment_id,
+			// 		shift_id: req.body.shift.id,
+			// 	},
+			// 	raw: true,
+			// });
+
+			// couponsToDelete = dbCoupons.filter(
+			// 	(dbCoupon) =>
+			// 		!req.body.coupons
+			// 			.filter((el) => el.db_id)
+			// 			.some((reqCoupon) => reqCoupon.db_id === dbCoupon.id)
+			// );
+			// const couponsToDeleteIds = couponsToDelete.map((el) => el.id);
+
+			// const updateCouponsPromises = couponsToEdit.map((el) => {
+			// 	return BranchWithdrawalsModel.update(el, {
+			// 		where: { id: el.db_id },
+			// 		transaction: t,
+			// 	});
+			// });
+
+			// await BranchWithdrawalsModel.bulkCreate(couponsToAdd, {
+			// 	transaction: t,
+			// });
+
+			// await Promise.all(updateCouponsPromises);
+
+			// await BranchWithdrawalsModel.destroy({
+			// 	where: {
+			// 		id: {
+			// 			[Op.in]: couponsToDeleteIds,
+			// 		},
+			// 	},
+			// 	transaction: t,
+			// });
+
+			await MovmentsShiftsModel.update(
+				{ state: req.body.state },
+				{
+					where: {
+						id: req.body.shift.id,
+					},
+					raw: true,
+					transaction: t,
+				}
+			);
+			res.status(200).json({
+				state: "success",
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error.errors[0].message, 500));
+	}
+});
+exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
+	try {
+		await req.db.transaction(async (t) => {
 			const currDate = new Date(req.body.date);
 			const nextDay = new Date(req.body.date);
 			nextDay.setDate(currDate.getDate() + 1);
@@ -534,11 +1055,15 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 			}
 
 			//update next shifts
+
+			const station = await StationModel.findByPk(req.body.station_id, {
+				raw: true, // Return raw data (plain object)
+			});
 			const nextMovments = await MovmentModel.findAll({
 				where: {
 					station_id: req.body.station_id,
 					date: {
-						[Op.gt]: currDate, // Find all records where the date is greater than currDate
+						[Op.between]: [currDate, station.start_date],
 					},
 				},
 				attributes: ["id"], // Only select the 'id' field
@@ -558,13 +1083,11 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 						},
 						raw: true,
 					});
-
 					const shiftsIds = nextShifts.map((el) => el.id);
-
 					await StoreMovmentModel.update(
 						{
-							prev_value: Sequelize.literal(`prev_value + ${diff}`),
-							curr_value: Sequelize.literal(`curr_value + ${diff}`),
+							prev_value: req.db.literal(`prev_value + ${diff}`),
+							curr_value: req.db.literal(`curr_value + ${diff}`),
 						},
 						{
 							where: {
@@ -579,6 +1102,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 					);
 				}
 			}
+
 			if (nextMovments.length > 0) {
 				const nextMovmentsIds = nextMovments.map((el) => el.id);
 				for (const { old_curr_value, curr_value, store_id } of req.body
@@ -586,8 +1110,8 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 					const diff = curr_value - old_curr_value;
 					await StoreMovmentModel.update(
 						{
-							prev_value: Sequelize.literal(`prev_value + ${diff}`),
-							curr_value: Sequelize.literal(`curr_value + ${diff}`),
+							prev_value: req.db.literal(`prev_value + ${diff}`),
+							curr_value: req.db.literal(`curr_value + ${diff}`),
 						},
 						{
 							where: {
@@ -675,115 +1199,40 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 			await OtherModel.bulkCreate(othersToAdd, {
 				transaction: t,
 			});
-			//updating credit sales
-			// let creditSalesToAdd = [];
-			// let creditSalesToEdit = [];
-			// let creditSalesToDelete = [];
-			// req.body.creditSales.forEach((el) => {
-			// 	if (el.db_id) {
-			// 		creditSalesToEdit.push({
-			// 			from_store: el.store,
-			// 			beneficiary_store: el.beneficiary_store,
-			// 			// store_movment_id: req.body.currStoresMovments.filter(
-			// 			// 	(ele) => ele.store_id === el.store
-			// 			// )[0].id,
-			// 			amount: +el.amount,
-			// 			price: el.price,
-			// 			title: el.title,
-			// 			employee_id: el.employee_id,
-			// 			db_id: el.db_id,
-			// 		});
-			// 	}
-			// 	if (!el.db_id) {
-			//
-			// 		creditSalesToAdd.push({
-			// 			station_id: +req.body.station_id,
-			// 			movment_id: +req.body.movment_id,
-			// 			shift_id: req.body.shift.id,
-			// 			from_store: el.store,
-			// 			beneficiary_store: el.beneficiary,
-			// 			amount: +el.amount,
-			// 			title: el.title,
-			// 			price: el.substance.price,
-			// 			employee_id: el.employee_id,
-			// 		});
-			// 	}
-			// });
+			// updating credit sales
+			let creditSalesToAdd = [];
+			let creditSalesToEdit = [];
+			let creditSalesToDelete = [];
 
-			// const dbCreditSales = await CreditSaleModel.findAll({
-			// 	where: {
-			// 		movment_id: req.body.movment_id,
-			// 		shift_id: req.body.shift.id,
-			// 	},
-			// 	raw: true,
-			// });
-
-			// creditSalesToDelete = dbCreditSales.filter(
-			// 	(dbCreditSale) =>
-			// 		!req.body.creditSales
-			// 			.filter((el) => el.db_id)
-			// 			.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id)
-			// );
-			// const creditSaleToDeleteIds = creditSalesToDelete.map((el) => el.id);
-			// const updateCreditSalesPromises = creditSalesToEdit.map((el) => {
-			// 	return CreditSaleModel.update(el, {
-			// 		where: { id: el.db_id },
-			// 		transaction: t,
-			// 	});
-			// });
-			// await Promise.all(updateCreditSalesPromises);
-
-			// await CreditSaleModel.destroy({
-			// 	where: {
-			// 		id: {
-			// 			[Op.in]: creditSaleToDeleteIds,
-			// 		},
-			// 	},
-			// 	transaction: t,
-			// });
-
-			// await CreditSaleModel.bulkCreate(creditSalesToAdd, {
-			// 	transaction: t,
-			// });
-			//updating coupons
-			let couponsToAdd = [];
-			let couponsToEdit = [];
-			let couponsToDelete = [];
-			req.body.coupons.forEach((el) => {
+			req.body.creditSales.forEach((el) => {
 				if (el.db_id) {
-					couponsToEdit.push({
-						station_id: +req.body.station_id,
-						movment_id: +req.body.movment_id,
+					creditSalesToEdit.push({
 						store_id: el.store,
-						store_movment_id: req.body.currStoresMovments.filter(
-							(ele) => ele.store_id === el.store
-						)[0].id,
+						client_id: el.client,
 						amount: +el.amount,
-						type: el.type,
 						price: el.price,
-						employee_id: el.employee_id,
+						title: el.title,
 						db_id: el.db_id,
+						employee_id: el.employee_id,
 					});
 				}
+
 				if (!el.db_id) {
-					couponsToAdd.push({
+					creditSalesToAdd.push({
 						station_id: +req.body.station_id,
 						movment_id: +req.body.movment_id,
 						shift_id: req.body.shift.id,
 						store_id: el.store,
-						store_movment_id: req.body.currStoresMovments.filter(
-							(ele) => ele.store_id === el.store
-						)[0].id,
+						client_id: el.client,
 						amount: +el.amount,
-						type: el.type,
-
+						title: el.title,
 						price: el.substance.price,
 						employee_id: el.employee_id,
 					});
 				}
 			});
 
-			const dbCoupons = await BranchWithdrawalsModel.findAll({
+			const dbCreditSales = await CreditSaleModel.findAll({
 				where: {
 					movment_id: req.body.movment_id,
 					shift_id: req.body.shift.id,
@@ -791,35 +1240,111 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 				raw: true,
 			});
 
-			couponsToDelete = dbCoupons.filter(
-				(dbCoupon) =>
-					!req.body.coupons
+			creditSalesToDelete = dbCreditSales.filter(
+				(dbCreditSale) =>
+					!req.body.creditSales
 						.filter((el) => el.db_id)
-						.some((reqCoupon) => reqCoupon.db_id === dbCoupon.id)
+						.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id)
 			);
-			const couponsToDeleteIds = couponsToDelete.map((el) => el.id);
 
-			const updateCouponsPromises = couponsToEdit.map((el) => {
-				return BranchWithdrawalsModel.update(el, {
+			const creditSaleToDeleteIds = creditSalesToDelete.map((el) => el.id);
+
+			const updateCreditSalesPromises = creditSalesToEdit.map((el) => {
+				return CreditSaleModel.update(el, {
 					where: { id: el.db_id },
 					transaction: t,
 				});
 			});
 
-			await BranchWithdrawalsModel.bulkCreate(couponsToAdd, {
-				transaction: t,
-			});
+			await Promise.all(updateCreditSalesPromises);
 
-			await Promise.all(updateCouponsPromises);
-
-			await BranchWithdrawalsModel.destroy({
+			await CreditSaleModel.destroy({
 				where: {
 					id: {
-						[Op.in]: couponsToDeleteIds,
+						[Op.in]: creditSaleToDeleteIds,
 					},
 				},
 				transaction: t,
 			});
+
+			await CreditSaleModel.bulkCreate(creditSalesToAdd, {
+				transaction: t,
+			});
+			//updating coupons
+			// let couponsToAdd = [];
+			// let couponsToEdit = [];
+			// let couponsToDelete = [];
+			// req.body.coupons.forEach((el) => {
+			// 	if (el.db_id) {
+			// 		couponsToEdit.push({
+			// 			station_id: +req.body.station_id,
+			// 			movment_id: +req.body.movment_id,
+			// 			store_id: el.store,
+			// 			store_movment_id: req.body.currStoresMovments.filter(
+			// 				(ele) => ele.store_id === el.store
+			// 			)[0].id,
+			// 			amount: +el.amount,
+			// 			type: el.type,
+			// 			price: el.price,
+			// 			employee_id: el.employee_id,
+			// 			db_id: el.db_id,
+			// 		});
+			// 	}
+			// 	if (!el.db_id) {
+			// 		couponsToAdd.push({
+			// 			station_id: +req.body.station_id,
+			// 			movment_id: +req.body.movment_id,
+			// 			shift_id: req.body.shift.id,
+			// 			store_id: el.store,
+			// 			store_movment_id: req.body.currStoresMovments.filter(
+			// 				(ele) => ele.store_id === el.store
+			// 			)[0].id,
+			// 			amount: +el.amount,
+			// 			type: el.type,
+
+			// 			price: el.substance.price,
+			// 			employee_id: el.employee_id,
+			// 		});
+			// 	}
+			// });
+
+			// const dbCoupons = await BranchWithdrawalsModel.findAll({
+			// 	where: {
+			// 		movment_id: req.body.movment_id,
+			// 		shift_id: req.body.shift.id,
+			// 	},
+			// 	raw: true,
+			// });
+
+			// couponsToDelete = dbCoupons.filter(
+			// 	(dbCoupon) =>
+			// 		!req.body.coupons
+			// 			.filter((el) => el.db_id)
+			// 			.some((reqCoupon) => reqCoupon.db_id === dbCoupon.id)
+			// );
+			// const couponsToDeleteIds = couponsToDelete.map((el) => el.id);
+
+			// const updateCouponsPromises = couponsToEdit.map((el) => {
+			// 	return BranchWithdrawalsModel.update(el, {
+			// 		where: { id: el.db_id },
+			// 		transaction: t,
+			// 	});
+			// });
+
+			// await BranchWithdrawalsModel.bulkCreate(couponsToAdd, {
+			// 	transaction: t,
+			// });
+
+			// await Promise.all(updateCouponsPromises);
+
+			// await BranchWithdrawalsModel.destroy({
+			// 	where: {
+			// 		id: {
+			// 			[Op.in]: couponsToDeleteIds,
+			// 		},
+			// 	},
+			// 	transaction: t,
+			// });
 
 			await MovmentsShiftsModel.update(
 				{ state: req.body.state },
@@ -841,6 +1366,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 });
 exports.deleteMovment = catchAsync(async (req, res, next) => {
 	try {
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
 		await MovmentModel.destroy({
 			where: {
 				id: req.params.id,
@@ -855,7 +1381,34 @@ exports.deleteMovment = catchAsync(async (req, res, next) => {
 });
 exports.changeMovmentState = catchAsync(async (req, res, next) => {
 	try {
-		await sequelize.transaction(async (t) => {
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const StationModel = getModel(req.headers["x-year"], "station");
+			const UserStationModel = getModel(req.headers["x-year"], "user_station");
+			const UserModel = getModel(req.headers["x-year"], "user");
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const IncomeModel = getModel(req.headers["x-year"], "income");
+			const calibrationModel = getModel(req.headers["x-year"], "calibration");
+			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+			const BranchWithdrawalsModel = getModel(
+				req.headers["x-year"],
+				"branch_withdrawals"
+			);
+			const OtherModel = getModel(req.headers["x-year"], "other");
+			const PermissionModel = getModel(req.headers["x-year"], "permission");
 			if (req.body.state === "pending") {
 				// التحقق من وجود حركة معلقة
 				const checkPendingMovment = await MovmentModel.findOne({
@@ -1072,12 +1625,259 @@ exports.changeMovmentState = catchAsync(async (req, res, next) => {
 		return next(new AppError(error, 500));
 	}
 });
+exports.spicialChangeMovmentState = catchAsync(async (req, res, next) => {
+	try {
+		await req.db.transaction(async (t) => {
+			if (req.body.state === "pending") {
+				// التحقق من وجود حركة معلقة
+				const checkPendingMovment = await MovmentModel.findOne({
+					where: { station_id: req.body.station_id, state: "pending" },
+					order: [["createdAt", "DESC"]],
+				});
+				if (checkPendingMovment) {
+					return next(new AppError("لا يمكن فتح أكثر من حركة بنفس الوقت", 500));
+				}
+
+				// تحديث الحالات لبقية الجداول
+				const station = await StationModel.findByPk(req.body.station_id, {
+					raw: true, // Return raw data (plain object)
+				});
+
+				const movments = await MovmentModel.findAll({
+					where: {
+						station_id: req.body.station_id,
+						date: {
+							[Op.between]: [req.body.date, station.start_date],
+						},
+					},
+					include: [{ model: StationModel, attributes: ["name"] }],
+				});
+
+				let movmentsIds = [];
+				movments.forEach((el) => movmentsIds.push(el.id));
+
+				await MovmentModel.update(
+					{ state: req.body.state },
+					{ where: { id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+
+				// استكمال التحديث لبقية الجداول إذا لزم الأمر:
+				await DispenserMovmentModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+				await StoreMovmentModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+				await MovmentsShiftsModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+				await IncomeModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+				await calibrationModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+				await SurplusModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+				await BranchWithdrawalsModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+				await OtherModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+				);
+
+				const movmentsLines = movments
+					.map((movment) => {
+						return `• ${movment.date}`;
+					})
+					.join("\n");
+				const users = await UserStationModel.findAll({
+					where: { station_id: req.body.station_id },
+					raw: true,
+				});
+				const usersStationsIds = users.map((el) => el.user_id);
+				const usersWithEditNotification = await PermissionModel.findAll({
+					where: {
+						permission: "editNotification",
+						user_id: { [Op.in]: usersStationsIds },
+					},
+					raw: true,
+				});
+				const usersIds = usersWithEditNotification.map((el) => el.user_id);
+				const usersPhones = await UserModel.findAll({
+					where: { id: { [Op.in]: usersIds } },
+					raw: true,
+				});
+
+				for (const user of usersPhones) {
+					await notificationQueue.add("send-whatsapp", {
+						recipient: user.phone,
+						message: `تم فتح حركة الايام التالية لـ ${movments[0].station.name}\n${movmentsLines}`,
+					});
+				}
+			}
+			if (req.body.state === "approved") {
+				// التحقق من وجود حركة معلقة بتاريخ سابق
+				const checkPendingMovment = await MovmentModel.findAll({
+					where: {
+						station_id: req.body.station_id,
+						state: "pending",
+						date: {
+							[Op.lt]: req.body.date,
+						},
+					},
+					raw: true,
+				});
+				if (checkPendingMovment.length > 0) {
+					return next(
+						new AppError(
+							"لا يمكن تأكيد الحركة لوجود حركة معلقة بتاريخ سابق",
+							500
+						)
+					);
+				}
+
+				await MovmentModel.update(
+					{ state: req.body.state },
+					{ where: { id: req.body.movment_id }, transaction: t }
+				);
+				// إرسال إشعار عبر WhatsApp
+				const movment = await MovmentModel.findByPk(req.body.movment_id, {
+					include: [{ model: StationModel, attributes: ["name"] }],
+					raw: true,
+				});
+				const lastShift = await MovmentsShiftsModel.findOne({
+					where: { movment_id: req.body.movment_id, number: movment.shifts },
+				});
+				const storesData = await StoreMovmentModel.findAll({
+					where: { movment_id: req.body.movment_id, shift_id: lastShift.id },
+					include: [
+						{
+							model: StoreModel,
+							attributes: ["name"],
+							include: [{ model: SubstanceModel, attributes: ["name"] }],
+						},
+					],
+					raw: true,
+				});
+				const incomes = await IncomeModel.findAll({
+					where: {
+						movment_id: req.body.movment_id,
+					},
+					raw: true,
+				});
+				const storeLines = storesData
+					.map((store) => {
+						const storeName = store["store.name"];
+						let income = 0;
+						const filteredIncomes = incomes.filter(
+							(el) => el.store_id === store.store_id
+						);
+						filteredIncomes.forEach((el) => (income = income + el.amount));
+						const value = store.curr_value;
+						const sales = store.prev_value + income - store.curr_value;
+
+						const substance = store["store.substance.name"];
+						return `${storeName}-${substance}:\nالمبيعات:${sales}لتر${
+							store.deficit > 0
+								? `\nالرصيد الدفتري:${value}لتر\nالعجز:${store.deficit}لتر`
+								: ""
+						}\nالرصيد الفعلي:${value - store.deficit}لتر`;
+					})
+					.join("\n===============\n");
+
+				const users = await UserStationModel.findAll({
+					where: { station_id: movment.station_id },
+					raw: true,
+				});
+
+				const usersStationsIds = users.map((el) => el.user_id);
+				const usersWithConfirmNotification = await PermissionModel.findAll({
+					where: {
+						permission: "confirmNotification",
+						user_id: { [Op.in]: usersStationsIds },
+					},
+					raw: true,
+				});
+				const usersIds = usersWithConfirmNotification.map((el) => el.user_id);
+				const usersPhones = await UserModel.findAll({
+					where: { id: { [Op.in]: usersIds } },
+					raw: true,
+				});
+				for (const user of usersPhones) {
+					await notificationQueue.add("send-whatsapp", {
+						recipient: user.phone,
+						message: `تم ادخال الحركة بتاريخ ${movment.date} لـ ${movment["station.name"]} \n• أرصدة المخازن:\n ${storeLines}`,
+					});
+				}
+				await IncomeModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: req.body.movment_id }, transaction: t }
+				);
+				await calibrationModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: req.body.movment_id }, transaction: t }
+				);
+				await SurplusModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: req.body.movment_id }, transaction: t }
+				);
+				await BranchWithdrawalsModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: req.body.movment_id }, transaction: t }
+				);
+				await OtherModel.update(
+					{ state: req.body.state },
+					{ where: { movment_id: req.body.movment_id }, transaction: t }
+				);
+			}
+			res.status(200).json({
+				state: "success",
+			});
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
 exports.getMovmentReport = catchAsync(async (req, res, next) => {
 	try {
 		let dispensersMovment = [];
 		let storesMovment = [];
+		await req.db.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+			const StoreModel = getModel(req.headers["x-year"], "store");
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const TankModel = getModel(req.headers["x-year"], "tank");
+			const IncomeModel = getModel(req.headers["x-year"], "income");
+			const calibrationModel = getModel(req.headers["x-year"], "calibration");
+			const SurplusModel = getModel(req.headers["x-year"], "surplus");
 
-		await sequelize.transaction(async (t) => {
+			const OtherModel = getModel(req.headers["x-year"], "other");
+			const ClientModel = getModel(req.headers["x-year"], "client");
+			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+
 			const movment = await MovmentModel.findOne({
 				where: {
 					id: req.params.id,
@@ -1258,7 +2058,28 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				],
 				transaction: t,
 			});
-
+			const creditSales = await CreditSaleModel.findAll({
+				where: {
+					movment_id: req.params.id,
+				},
+				include: [
+					{
+						model: StoreModel,
+						attributes: ["name"],
+						include: [
+							{
+								model: SubstanceModel,
+								attributes: ["name"],
+							},
+						],
+					},
+					{
+						model: ClientModel,
+						attributes: ["name"],
+					},
+				],
+				transaction: t,
+			});
 			const calibrations = await calibrationModel.findAll({
 				where: {
 					movment_id: req.params.id,
@@ -1313,24 +2134,24 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				],
 				transaction: t,
 			});
-			const coupons = await BranchWithdrawalsModel.findAll({
-				where: {
-					movment_id: req.params.id,
-				},
-				include: [
-					{
-						model: StoreModel,
-						attributes: ["name"],
-						include: [
-							{
-								model: SubstanceModel,
-								attributes: ["name"],
-							},
-						],
-					},
-				],
-				transaction: t,
-			});
+			// const coupons = await BranchWithdrawalsModel.findAll({
+			// 	where: {
+			// 		movment_id: req.params.id,
+			// 	},
+			// 	include: [
+			// 		{
+			// 			model: StoreModel,
+			// 			attributes: ["name"],
+			// 			include: [
+			// 				{
+			// 					model: SubstanceModel,
+			// 					attributes: ["name"],
+			// 				},
+			// 			],
+			// 		},
+			// 	],
+			// 	transaction: t,
+			// });
 			res.status(200).json({
 				state: "success",
 				storesMovment,
@@ -1339,7 +2160,8 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				others,
 				surplus,
 				calibrations,
-				coupons,
+				// coupons,
+				creditSales,
 			});
 		});
 	} catch (error) {

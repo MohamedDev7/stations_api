@@ -1,23 +1,13 @@
 const catchAsync = require("../utils/catchAsync");
-const ShiftModel = require("./../models/shiftModel");
 const AppError = require("../utils/appError");
-const DispenserMovmentModel = require("../models/dispenserMovmentModel");
-const DispenserModel = require("../models/dispenserModel");
-const TankModel = require("../models/tankModel");
-const SubstanceModel = require("../models/substanceModel");
-const StoreMovmentModel = require("../models/storeMovmentModel");
-const StoreModel = require("../models/storeModel");
-const OtherModel = require("../models/otherModel");
-const IncomeModel = require("../models/incomeModel");
 const sequelize = require("./../connection");
-const BranchWithdrawalsModel = require("../models/branchWithdrawalsModel");
-const MovmentModel = require("../models/movmentModel");
 const { Op } = require("sequelize");
-const MovmentsShiftsModel = require("../models/movmentsShiftsModel");
-const CreditSaleModel = require("../models/creditSaleModel");
+const { getModel } = require("../utils/modelSelect");
 
 exports.getShiftsByStationId = catchAsync(async (req, res, next) => {
 	try {
+		const ShiftModel = getModel(req.headers["x-year"], "shift");
+
 		const shifts = await ShiftModel.findAll({
 			where: {
 				station_id: req.params.id,
@@ -33,6 +23,11 @@ exports.getShiftsByStationId = catchAsync(async (req, res, next) => {
 });
 exports.getLastShiftIdByMovmentId = catchAsync(async (req, res, next) => {
 	try {
+		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const MovmentsShiftsModel = getModel(
+			req.headers["x-year"],
+			"movments_shift"
+		);
 		const movment = await MovmentModel.findByPk(+req.params.id);
 		const lastShift = await MovmentsShiftsModel.findOne({
 			where: {
@@ -51,6 +46,10 @@ exports.getLastShiftIdByMovmentId = catchAsync(async (req, res, next) => {
 });
 exports.getMovmentsShiftsByMovmentId = catchAsync(async (req, res, next) => {
 	try {
+		const MovmentsShiftsModel = getModel(
+			req.headers["x-year"],
+			"movments_shift"
+		);
 		const shifts = await MovmentsShiftsModel.findAll({
 			where: {
 				movment_id: req.params.id,
@@ -67,7 +66,27 @@ exports.getMovmentsShiftsByMovmentId = catchAsync(async (req, res, next) => {
 exports.deleteShiftBYMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
-			await sequelize.transaction(async (t) => {
+			const MovmentModel = getModel(req.headers["x-year"], "movment");
+			const MovmentsShiftsModel = getModel(
+				req.headers["x-year"],
+				"movments_shift"
+			);
+			const StoreMovmentModel = getModel(
+				req.headers["x-year"],
+				"store_movment"
+			);
+			const DispenserMovmentModel = getModel(
+				req.headers["x-year"],
+				"dispenser_movment"
+			);
+
+			const BranchWithdrawalsModel = getModel(
+				req.headers["x-year"],
+				"branch_withdrawals"
+			);
+			const OtherModel = getModel(req.headers["x-year"], "other");
+
+			await req.db.transaction(async (t) => {
 				//check no shifts after
 				const movment = await MovmentModel.findByPk(req.params.id, {
 					raw: true,
@@ -151,7 +170,26 @@ exports.deleteShiftBYMovmentIdAndShiftId = catchAsync(
 exports.getShiftDataByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
-			await sequelize.transaction(async (t) => {
+			await req.db.transaction(async (t) => {
+				const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+				const TankModel = getModel(req.headers["x-year"], "tank");
+				const SubstanceModel = getModel(req.headers["x-year"], "substance");
+				const DispenserMovmentModel = getModel(
+					req.headers["x-year"],
+					"dispenser_movment"
+				);
+				const StoreModel = getModel(req.headers["x-year"], "store");
+				const StoreMovmentModel = getModel(
+					req.headers["x-year"],
+					"store_movment"
+				);
+				const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+				const BranchWithdrawalsModel = getModel(
+					req.headers["x-year"],
+					"branch_withdrawals"
+				);
+				const OtherModel = getModel(req.headers["x-year"], "other");
+
 				const dispensersMovment = await DispenserMovmentModel.findAll({
 					where: {
 						movment_id: req.params.id,
@@ -246,18 +284,6 @@ exports.getShiftDataByMovmentIdAndShiftId = catchAsync(
 						movment_id: req.params.id,
 						shift_id: req.params.shift,
 					},
-					include: [
-						{
-							model: StoreModel,
-							attributes: ["id", "name"],
-							include: [
-								{
-									model: SubstanceModel,
-									attributes: ["id", "name"],
-								},
-							],
-						},
-					],
 					transaction: t,
 				});
 				const coupons = await BranchWithdrawalsModel.findAll({

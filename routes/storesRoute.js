@@ -4,13 +4,13 @@ const storesController = require("./../controllers/storesController");
 const router = express.Router();
 router
 	.route("")
-	// .post(storesController.addstore)
+	.post(storesController.addStore)
 	.get(storesController.getAllstores);
 
-router.route("/station/:id").get(
-	// authController.restrictTo("editstore"),
-	storesController.getStoreByStationId
-);
+router.route("/station/:id").get(storesController.getStoreByStationId);
+router
+	.route("/station/client/:station_id/:client_id")
+	.get(storesController.getStoreByStationIdAndClientId);
 router.route("/movments/shifts/:id/:shift_id").get(
 	// authController.restrictTo("editstore"),
 	storesController.getStoresMovmentByMovmentIdAndShiftId
