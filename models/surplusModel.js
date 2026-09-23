@@ -34,6 +34,11 @@ function defineSurplusModel(sequelize, models) {
 		date: {
 			type: DataTypes.DATEONLY,
 		},
+		is_annual_stocktaking: {
+			type: DataTypes.INTEGER,
+			allowNull: false,
+			defaultValue: 0,
+		},
 	});
 	if (models) {
 		if (models.StoreModel) {

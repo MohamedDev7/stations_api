@@ -7,7 +7,7 @@ const { getModel } = require("../utils/modelSelect");
 
 exports.getAllStations = catchAsync(async (req, res, next) => {
 	try {
-		const StationModel = getModel(req.headers["x-year"], "station");
+		const StationModel = getModel(req.year, "station");
 		const stations = await StationModel.findAll({
 			where: {
 				id: {
@@ -26,7 +26,7 @@ exports.getAllStations = catchAsync(async (req, res, next) => {
 });
 exports.getStation = catchAsync(async (req, res, next) => {
 	try {
-		const StationModel = getModel(req.headers["x-year"], "station");
+		const StationModel = getModel(req.year, "station");
 		const substance = await StationModel.findByPk(req.params.id);
 		res.status(200).json({
 			state: "success",
@@ -38,31 +38,25 @@ exports.getStation = catchAsync(async (req, res, next) => {
 });
 exports.addStation = catchAsync(async (req, res, next) => {
 	try {
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const ShiftModel = getModel(req.headers["x-year"], "shift");
+		const StationModel = getModel(req.year, "station");
+		const ShiftModel = getModel(req.year, "shift");
 		const SubstancePriceMovmentModel = getModel(
-			req.headers["x-year"],
-			"substance_price_movment"
+			req.year,
+			"substance_price_movment",
 		);
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const MovmentsShiftsModel = getModel(
-			req.headers["x-year"],
-			"movments_shift"
-		);
-		const TankModel = getModel(req.headers["x-year"], "tank");
-		const TankMovmentModel = getModel(req.headers["x-year"], "tank_movment");
-		const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-		const DispenserMovmentModel = getModel(
-			req.headers["x-year"],
-			"dispenser_movment"
-		);
+		const MovmentModel = getModel(req.year, "movment");
+		const MovmentsShiftsModel = getModel(req.year, "movments_shift");
+		const TankModel = getModel(req.year, "tank");
+		const TankMovmentModel = getModel(req.year, "tank_movment");
+		const DispenserModel = getModel(req.year, "dispenser");
+		const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
 		// const DispenserWheelCounterMovmentModel = getModel(
-		// 	req.headers["x-year"],
+		// 	req.year,
 		// 	"dispenser_wheel_counter_movment"
 		// );
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const StoreMovmentModel = getModel(req.headers["x-year"], "store_movment");
-		const IncomeModel = getModel(req.headers["x-year"], "income");
+		const StoreModel = getModel(req.year, "store");
+		const StoreMovmentModel = getModel(req.year, "store_movment");
+		const IncomeModel = getModel(req.year, "income");
 
 		await req.db.transaction(async (t) => {
 			const substances = await SubstancePriceMovmentModel.findAll({
@@ -83,7 +77,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					shifts: req.body.shifts.length,
 					supervisor: req.body.supervisor,
 				},
-				{ transaction: t }
+				{ transaction: t },
 			);
 
 			const shiftsArr = req.body.shifts.map((el) => {
@@ -111,7 +105,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					shifts: req.body.shifts.length,
 					has_stocktaking: 0,
 				},
-				{ transaction: t }
+				{ transaction: t },
 			);
 			const movmentShift = await MovmentsShiftsModel.create(
 				{
@@ -123,7 +117,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 						.start,
 					end: shifts.filter((shift) => shift.number === highestShift)[0].end,
 				},
-				{ transaction: t, raw: true }
+				{ transaction: t, raw: true },
 			);
 
 			const tanksArr = req.body.tanks.map((el) => {
@@ -146,10 +140,10 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					movment_id: movment.id,
 					station_id: station.id,
 					price: substances.filter(
-						(ele) => ele.substance_id === el.substance_id
+						(ele) => ele.substance_id === el.substance_id,
 					)[0].price,
 					price_movment_id: substances.filter(
-						(ele) => ele.substance_id === el.substance_id
+						(ele) => ele.substance_id === el.substance_id,
 					)[0].id,
 				};
 			});
@@ -190,10 +184,10 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					employee_id: 0,
 					station_id: station.id,
 					price: substances.filter(
-						(ele) => ele.substance_id === substance_id
+						(ele) => ele.substance_id === substance_id,
 					)[0].price,
 					price_movment_id: substances.filter(
-						(ele) => ele.substance_id === substance_id
+						(ele) => ele.substance_id === substance_id,
 					)[0].id,
 				};
 			});
@@ -236,7 +230,7 @@ exports.addStation = catchAsync(async (req, res, next) => {
 
 			const newStores = stores.map((el) => {
 				const updatedStore = req.body.stores.find(
-					(ele) => ele.name === el.name && el.substance_id === ele.substance_id
+					(ele) => ele.name === el.name && el.substance_id === ele.substance_id,
 				);
 				if (updatedStore) {
 					return { ...updatedStore, id: el.id };
@@ -260,17 +254,18 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					truck_number: 1,
 					truck_driver: "رصيد افتتاحي",
 					price: substances.filter(
-						(ele) => ele.substance_id === el.substance_id
+						(ele) => ele.substance_id === el.substance_id,
 					)[0].price,
 					price_movment_id: substances.filter(
-						(ele) => ele.substance_id === el.substance_id
+						(ele) => ele.substance_id === el.substance_id,
 					)[0].id,
 				};
 			});
+			console.log(`incomesArr`, incomesArr);
 			await IncomeModel.bulkCreate(incomesArr, {
 				transaction: t,
 			});
-
+			console.log(`test555`);
 			const storesMovmentsArr = [];
 			stores.forEach((store) => {
 				storesMovmentsArr.push({
@@ -287,10 +282,10 @@ exports.addStation = catchAsync(async (req, res, next) => {
 					station_id: station.id,
 					shift_id: movmentShift.id,
 					price: substances.filter(
-						(ele) => ele.substance_id === store.substance_id
+						(ele) => ele.substance_id === store.substance_id,
 					)[0].price,
 					price_movment_id: substances.filter(
-						(ele) => ele.substance_id === store.substance_id
+						(ele) => ele.substance_id === store.substance_id,
 					)[0].id,
 				});
 			});
@@ -301,12 +296,13 @@ exports.addStation = catchAsync(async (req, res, next) => {
 			state: "success",
 		});
 	} catch (error) {
+		console.log(`error`, error);
 		return next(new AppError(error, 500));
 	}
 });
 exports.deleteStation = catchAsync(async (req, res, next) => {
 	try {
-		const StationModel = getModel(req.headers["x-year"], "station");
+		const StationModel = getModel(req.year, "station");
 		await StationModel.destroy({
 			where: { id: req.params.id },
 		});
@@ -320,12 +316,12 @@ exports.deleteStation = catchAsync(async (req, res, next) => {
 
 exports.updateStation = catchAsync(async (req, res, next) => {
 	try {
-		const StationModel = getModel(req.headers["x-year"], "station");
+		const StationModel = getModel(req.year, "station");
 		await SubstanceModel.update(
 			{ name: req.body.name, price: req.body.price },
 			{
 				where: { id: req.params.id },
-			}
+			},
 		);
 		res.status(200).json({
 			state: "success",

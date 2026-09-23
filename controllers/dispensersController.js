@@ -6,14 +6,11 @@ const { Op, Sequelize, fn, col } = require("sequelize");
 exports.getDispensersMovmentByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const TankModel = getModel(req.headers["x-year"], "tank");
-			const SubstanceModel = getModel(req.headers["x-year"], "substance");
-			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-			const DispenserMovmentModel = getModel(
-				req.headers["x-year"],
-				"dispenser_movment"
-			);
+			const MovmentModel = getModel(req.year, "movment");
+			const TankModel = getModel(req.year, "tank");
+			const SubstanceModel = getModel(req.year, "substance");
+			const DispenserModel = getModel(req.year, "dispenser");
+			const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
 			await req.db.transaction(async (t) => {
 				const movment = await MovmentModel.findOne({
 					where: {
@@ -80,10 +77,10 @@ exports.getDispensersMovmentByMovmentIdAndShiftId = catchAsync(
 );
 exports.getAllDispensers = catchAsync(async (req, res, next) => {
 	try {
-		const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const TankModel = getModel(req.headers["x-year"], "tank");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const DispenserModel = getModel(req.year, "dispenser");
+		const StationModel = getModel(req.year, "station");
+		const TankModel = getModel(req.year, "tank");
+		const SubstanceModel = getModel(req.year, "substance");
 		await req.db.transaction(async (t) => {
 			const dispensers = await DispenserModel.findAll({
 				include: [
@@ -111,9 +108,9 @@ exports.getAllDispensers = catchAsync(async (req, res, next) => {
 exports.getDispensersByStationId = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-			const TankModel = getModel(req.headers["x-year"], "tank");
-			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const DispenserModel = getModel(req.year, "dispenser");
+			const TankModel = getModel(req.year, "tank");
+			const SubstanceModel = getModel(req.year, "substance");
 			const dispensers = await DispenserModel.findAll({
 				where: { station_id: req.params.id, is_active: 1 },
 				include: [
@@ -137,22 +134,16 @@ exports.getDispensersByStationId = catchAsync(async (req, res, next) => {
 exports.addDispenser = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-			const DispenserMovmentModel = getModel(
-				req.headers["x-year"],
-				"dispenser_movment"
-			);
+			const MovmentModel = getModel(req.year, "movment");
+			const DispenserModel = getModel(req.year, "dispenser");
+			const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
 			const DispenserWheelCounterMovmentModel = getModel(
-				req.headers["x-year"],
+				req.year,
 				"dispenser_wheel_counter_movment"
 			);
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 			const SubstancePriceMovmentModel = getModel(
-				req.headers["x-year"],
+				req.year,
 				"substance_price_movment"
 			);
 			const currMomvnet = await MovmentModel.findOne({
@@ -278,8 +269,8 @@ exports.addDispenser = catchAsync(async (req, res, next) => {
 exports.updateDispenserState = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
+			const MovmentModel = getModel(req.year, "movment");
+			const DispenserModel = getModel(req.year, "dispenser");
 			//check pendding Movment
 			const checkPendingMovment = await MovmentModel.findOne({
 				where: { station_id: +req.body.station_id, state: "pending" },
@@ -306,15 +297,12 @@ exports.updateDispenserState = catchAsync(async (req, res, next) => {
 });
 exports.getAnnualDispensersMovment = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const TankModel = getModel(req.headers["x-year"], "tank");
-		const ShiftModel = getModel(req.headers["x-year"], "shift");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
-		const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-		const DispenserMovmentModel = getModel(
-			req.headers["x-year"],
-			"dispenser_movment"
-		);
+		const MovmentModel = getModel(req.year, "movment");
+		const TankModel = getModel(req.year, "tank");
+		const ShiftModel = getModel(req.year, "shift");
+		const SubstanceModel = getModel(req.year, "substance");
+		const DispenserModel = getModel(req.year, "dispenser");
+		const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
 
 		await req.db.transaction(async (t) => {
 			// Get all dispensers for this station

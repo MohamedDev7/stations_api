@@ -1,7 +1,7 @@
 // queues/notificationQueue.js
 const { Queue } = require("bullmq");
 
-const notificationQueue = new Queue("notification", {
+const notificationQueue = new Queue("stations-notification", {
 	connection: {
 		host: "127.0.0.1",
 		port: 6379,

@@ -6,8 +6,8 @@ const { getModel } = require("../utils/modelSelect");
 
 exports.getStoreByStationId = catchAsync(async (req, res, next) => {
 	try {
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 		const stores = await StoreModel.findAll({
 			where: {
 				station_id: req.params.id,
@@ -29,8 +29,8 @@ exports.getStoreByStationId = catchAsync(async (req, res, next) => {
 });
 exports.getStoreByStationIdAndClientId = catchAsync(async (req, res, next) => {
 	try {
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 		const stores = await StoreModel.findAll({
 			where: {
 				station_id: req.params.station_id,
@@ -55,19 +55,13 @@ exports.getStoresMovmentByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
 			await req.db.transaction(async (t) => {
-				const StoreModel = getModel(req.headers["x-year"], "store");
-				const SubstanceModel = getModel(req.headers["x-year"], "substance");
-				const StoreMovmentModel = getModel(
-					req.headers["x-year"],
-					"store_movment"
-				);
-				const QuantityDeductionModel = getModel(
-					req.headers["x-year"],
-					"quantity_deduction"
-				);
-				const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+				const StoreModel = getModel(req.year, "store");
+				const SubstanceModel = getModel(req.year, "substance");
+				const StoreMovmentModel = getModel(req.year, "store_movment");
+				const QuantityDeductionModel = getModel(req.year, "quantity_deduction");
+				const StocktakingModel = getModel(req.year, "stocktaking");
 				const StocktakingStoresMovmentsModel = getModel(
-					req.headers["x-year"],
+					req.year,
 					"stocktaking_stores_movments"
 				);
 
@@ -162,9 +156,9 @@ exports.getStoresMovmentByMovmentIdAndShiftId = catchAsync(
 
 exports.getAllstores = catchAsync(async (req, res, next) => {
 	try {
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
-		const StationModel = getModel(req.headers["x-year"], "station");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
+		const StationModel = getModel(req.year, "station");
 		const stores = await StoreModel.findAll({
 			include: [
 				{
@@ -194,19 +188,13 @@ exports.getAllstores = catchAsync(async (req, res, next) => {
 exports.addStore = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const StoreModel = getModel(req.headers["x-year"], "store");
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const IncomeModel = getModel(req.headers["x-year"], "income");
+			const StoreModel = getModel(req.year, "store");
+			const MovmentModel = getModel(req.year, "movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const IncomeModel = getModel(req.year, "income");
 			const SubstancePriceMovmentModel = getModel(
-				req.headers["x-year"],
+				req.year,
 				"substance_price_movment"
 			);
 

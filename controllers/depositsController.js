@@ -5,9 +5,9 @@ const { getModel } = require("../utils/modelSelect");
 
 exports.getAllDeposits = catchAsync(async (req, res, next) => {
 	try {
-		const DepositModel = getModel(req.headers["x-year"], "deposit");
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const BankModel = getModel(req.headers["x-year"], "bank");
+		const DepositModel = getModel(req.year, "deposit");
+		const StationModel = getModel(req.year, "station");
+		const BankModel = getModel(req.year, "bank");
 		const stations = req.query.stations
 			? req.query.stations.split(",").filter((s) => s.length > 0)
 			: [];
@@ -16,22 +16,21 @@ exports.getAllDeposits = catchAsync(async (req, res, next) => {
 				[Sequelize.Op.in]: stations.length > 0 ? stations : req.stations,
 			},
 		};
-		const movmentWhereConditions = {};
 		if (
 			req.query.startDate &&
 			req.query.startDate !== "null" &&
 			req.query.endDate &&
 			req.query.endDate !== "null"
 		) {
-			movmentWhereConditions.date = {
+			whereConditions.invoice_date = {
 				[Sequelize.Op.between]: [req.query.startDate, req.query.endDate],
 			};
 		} else if (req.query.startDate && req.query.startDate !== "null") {
-			movmentWhereConditions.date = {
+			whereConditions.invoice_date = {
 				[Sequelize.Op.gte]: req.query.startDate,
 			};
 		} else if (req.query.endDate && req.query.endDate !== "null") {
-			movmentWhereConditions.date = {
+			whereConditions.invoice_date = {
 				[Sequelize.Op.lte]: req.query.endDate,
 			};
 		}
@@ -46,11 +45,7 @@ exports.getAllDeposits = catchAsync(async (req, res, next) => {
 			offset: +req.query.limit * +req.query.page,
 		});
 		const total = await DepositModel.count({
-			where: {
-				station_id: {
-					[Sequelize.Op.in]: req.stations,
-				},
-			},
+			where: whereConditions,
 		});
 		res.status(200).json({
 			state: "success",
@@ -63,8 +58,28 @@ exports.getAllDeposits = catchAsync(async (req, res, next) => {
 });
 exports.getDeposit = catchAsync(async (req, res, next) => {
 	try {
-		const DepositModel = getModel(req.headers["x-year"], "deposit");
+		const DepositModel = getModel(req.year, "deposit");
 		const deposit = await DepositModel.findByPk(req.params.id);
+		res.status(200).json({
+			state: "success",
+			deposit,
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getLastDepositByStationId = catchAsync(async (req, res, next) => {
+	try {
+		const DepositModel = getModel(req.year, "deposit");
+		const deposit = await DepositModel.findOne({
+			where: {
+				station_id: req.params.station_id,
+			},
+			order: [
+				["date", "DESC"],
+				["id", "DESC"],
+			],
+		});
 		res.status(200).json({
 			state: "success",
 			deposit,
@@ -75,12 +90,12 @@ exports.getDeposit = catchAsync(async (req, res, next) => {
 });
 exports.addDeposits = catchAsync(async (req, res, next) => {
 	try {
-		const DepositModel = getModel(req.headers["x-year"], "deposit");
+		const DepositModel = getModel(req.year, "deposit");
 		const stationsClosedMonthModel = getModel(
-			req.headers["x-year"],
-			"stations_closed_month"
+			req.year,
+			"stations_closed_month",
 		);
-		const operationDate = new Date(req.body.date);
+		const operationDate = new Date(req.body.invoiceDate);
 		const month = operationDate.getMonth() + 1; // 1-based month
 		// Check if month is closed for this station
 		const closedRecord = await stationsClosedMonthModel.findOne({
@@ -93,7 +108,7 @@ exports.addDeposits = catchAsync(async (req, res, next) => {
 
 		if (closedRecord) {
 			return next(
-				new AppError("الشهر مغلق لهذه المحطة، لا يمكن إضافة إيداع.", 403)
+				new AppError("الشهر مغلق لهذه المحطة، لا يمكن إضافة إيداع.", 403),
 			);
 		}
 		await DepositModel.create({
@@ -115,13 +130,13 @@ exports.addDeposits = catchAsync(async (req, res, next) => {
 });
 exports.deleteDeposit = catchAsync(async (req, res, next) => {
 	try {
-		const DepositModel = getModel(req.headers["x-year"], "deposit");
+		const DepositModel = getModel(req.year, "deposit");
 		const stationsClosedMonthModel = getModel(
-			req.headers["x-year"],
-			"stations_closed_month"
+			req.year,
+			"stations_closed_month",
 		);
 		const deposit = await DepositModel.findByPk(req.params.id, { raw: true });
-		const operationDate = new Date(deposit.date);
+		const operationDate = new Date(deposit.invoice_date);
 		const month = operationDate.getMonth() + 1; // 1-based month
 		// Check if month is closed for this station
 		const closedRecord = await stationsClosedMonthModel.findOne({
@@ -133,7 +148,7 @@ exports.deleteDeposit = catchAsync(async (req, res, next) => {
 		});
 		if (closedRecord) {
 			return next(
-				new AppError("الشهر مغلق لهذه المحطة، لا يمكن حذف الايداع.", 403)
+				new AppError("الشهر مغلق لهذه المحطة، لا يمكن حذف الايداع.", 403),
 			);
 		}
 		await DepositModel.destroy({
@@ -149,15 +164,15 @@ exports.deleteDeposit = catchAsync(async (req, res, next) => {
 
 exports.updateDeposit = catchAsync(async (req, res, next) => {
 	try {
-		const DepositModel = getModel(req.headers["x-year"], "deposit");
+		const DepositModel = getModel(req.year, "deposit");
 		const stationsClosedMonthModel = getModel(
-			req.headers["x-year"],
-			"stations_closed_month"
+			req.year,
+			"stations_closed_month",
 		);
 		const deposit = await DepositModel.findByPk(req.params.id, { raw: true });
-		const oldDoperationDate = new Date(deposit.date);
+		const oldDoperationDate = new Date(deposit.invoice_date);
 		const oldMonth = oldDoperationDate.getMonth() + 1;
-		const newDperationDate = new Date(deposit.date);
+		const newDperationDate = new Date(req.body.invoiceDate);
 		const newMonth = newDperationDate.getMonth() + 1;
 		// Check if month is closed for this station
 		const oldRecord = await stationsClosedMonthModel.findOne({
@@ -177,7 +192,7 @@ exports.updateDeposit = catchAsync(async (req, res, next) => {
 
 		if (oldRecord || newRecord) {
 			return next(
-				new AppError("الشهر مغلق لهذه المحطة، لا يمكن تعديل الايداع.", 403)
+				new AppError("الشهر مغلق لهذه المحطة، لا يمكن تعديل الايداع.", 403),
 			);
 		}
 		await DepositModel.update(
@@ -193,7 +208,7 @@ exports.updateDeposit = catchAsync(async (req, res, next) => {
 			},
 			{
 				where: { id: req.params.id },
-			}
+			},
 		);
 		res.status(200).json({
 			state: "success",

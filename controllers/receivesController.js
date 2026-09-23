@@ -4,15 +4,37 @@ const { getModel } = require("../utils/modelSelect");
 const { Sequelize } = require("sequelize");
 exports.getAllReceives = catchAsync(async (req, res, next) => {
 	try {
-		const ReceivesModel = getModel(req.headers["x-year"], "receive");
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const EmployeesModel = getModel(req.headers["x-year"], "employee");
-		const receives = await ReceivesModel.findAll({
-			where: {
-				station_id: {
-					[Sequelize.Op.in]: req.stations,
-				},
+		const ReceivesModel = getModel(req.year, "receive");
+		const StationModel = getModel(req.year, "station");
+		const EmployeesModel = getModel(req.year, "employee");
+		const stations = req.query.stations
+			? req.query.stations.split(",").filter((s) => s.length > 0)
+			: [];
+		const whereConditions = {
+			station_id: {
+				[Sequelize.Op.in]: stations.length > 0 ? stations : req.stations,
 			},
+		};
+		if (
+			req.query.startDate &&
+			req.query.startDate !== "null" &&
+			req.query.endDate &&
+			req.query.endDate !== "null"
+		) {
+			whereConditions.date = {
+				[Sequelize.Op.between]: [req.query.startDate, req.query.endDate],
+			};
+		} else if (req.query.startDate && req.query.startDate !== "null") {
+			whereConditions.date = {
+				[Sequelize.Op.gte]: req.query.startDate,
+			};
+		} else if (req.query.endDate && req.query.endDate !== "null") {
+			whereConditions.date = {
+				[Sequelize.Op.lte]: req.query.endDate,
+			};
+		}
+		const receives = await ReceivesModel.findAll({
+			where: whereConditions,
 			include: [
 				{
 					model: StationModel,
@@ -28,11 +50,7 @@ exports.getAllReceives = catchAsync(async (req, res, next) => {
 			offset: +req.query.limit * +req.query.page,
 		});
 		const total = await ReceivesModel.count({
-			where: {
-				station_id: {
-					[Sequelize.Op.in]: req.stations,
-				},
-			},
+			where: whereConditions,
 		});
 		res.status(200).json({
 			state: "success",
@@ -45,7 +63,7 @@ exports.getAllReceives = catchAsync(async (req, res, next) => {
 });
 exports.getReceive = catchAsync(async (req, res, next) => {
 	try {
-		const ReceivesModel = getModel(req.headers["x-year"], "receive");
+		const ReceivesModel = getModel(req.year, "receive");
 		const receive = await ReceivesModel.findByPk(req.params.id);
 		res.status(200).json({
 			state: "success",
@@ -58,7 +76,7 @@ exports.getReceive = catchAsync(async (req, res, next) => {
 
 exports.addReceive = catchAsync(async (req, res, next) => {
 	try {
-		const ReceivesModel = getModel(req.headers["x-year"], "receive");
+		const ReceivesModel = getModel(req.year, "receive");
 		await ReceivesModel.create({
 			date: req.body.date,
 			station_id: req.body.station,
@@ -76,7 +94,7 @@ exports.addReceive = catchAsync(async (req, res, next) => {
 });
 exports.deleteReceive = catchAsync(async (req, res, next) => {
 	try {
-		const ReceivesModel = getModel(req.headers["x-year"], "receive");
+		const ReceivesModel = getModel(req.year, "receive");
 		await ReceivesModel.destroy({
 			where: { id: req.params.id },
 		});
@@ -90,7 +108,7 @@ exports.deleteReceive = catchAsync(async (req, res, next) => {
 
 exports.updateReceive = catchAsync(async (req, res, next) => {
 	try {
-		const ReceivesModel = getModel(req.headers["x-year"], "receive");
+		const ReceivesModel = getModel(req.year, "receive");
 		await ReceivesModel.update(
 			{
 				date: req.body.date,

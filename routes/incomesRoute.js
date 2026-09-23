@@ -12,6 +12,11 @@ router
 
 router.route("/:id").delete(incomesController.deleteIncome);
 router.route("/spicial").patch(incomesController.spicialAddIncome);
+router
+	.route("/last/:station_id")
+	.get(incomesController.getLastIncomeByStationId);
+
+// router
 // 	.patch(
 // 		// authController.restrictTo("editTreasury"),
 // 		substancesController.updateSubstance

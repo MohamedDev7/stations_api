@@ -6,12 +6,12 @@ const { Sequelize, Op } = require("sequelize");
 
 exports.getAllSurpluses = catchAsync(async (req, res, next) => {
 	try {
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
-		const SurplusModel = getModel(req.headers["x-year"], "surplus");
-		const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
+		const StationModel = getModel(req.year, "station");
+		const MovmentModel = getModel(req.year, "movment");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
+		const SurplusModel = getModel(req.year, "surplus");
+		const StocktakingModel = getModel(req.year, "stocktaking");
 		const stations = req.query.stations
 			? req.query.stations.split(",").filter((s) => s.length > 0)
 			: [];
@@ -91,9 +91,9 @@ exports.getAllSurpluses = catchAsync(async (req, res, next) => {
 exports.getSurplusesByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
-			const SurplusModel = getModel(req.headers["x-year"], "surplus");
-			const StoreModel = getModel(req.headers["x-year"], "store");
-			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const SurplusModel = getModel(req.year, "surplus");
+			const StoreModel = getModel(req.year, "store");
+			const SubstanceModel = getModel(req.year, "substance");
 			const surpluses = await SurplusModel.findAll({
 				where: {
 					movment_id: req.params.movment_id,
@@ -124,9 +124,9 @@ exports.getSurplusesByMovmentIdAndShiftId = catchAsync(
 );
 exports.getSurplusesByMovmentIdAndDate = catchAsync(async (req, res, next) => {
 	try {
-		const SurplusModel = getModel(req.headers["x-year"], "surplus");
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const SurplusModel = getModel(req.year, "surplus");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 		const surpluses = await SurplusModel.findAll({
 			where: {
 				movment_id: req.params.movment_id,
@@ -158,16 +158,10 @@ exports.getSurplusesByMovmentIdAndDate = catchAsync(async (req, res, next) => {
 exports.addSurplus = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const SurplusModel = getModel(req.headers["x-year"], "surplus");
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
+			const SurplusModel = getModel(req.year, "surplus");
+			const MovmentModel = getModel(req.year, "movment");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 			// check if there is momvnets or shifts after
 			const currMovment = await MovmentModel.findByPk(req.body.movmentId, {
 				raw: true,
@@ -291,17 +285,11 @@ exports.addSurplus = catchAsync(async (req, res, next) => {
 exports.spicialAddSurplus = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const SurplusModel = getModel(req.headers["x-year"], "surplus");
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
-			const StationModel = getModel(req.headers["x-year"], "station");
+			const SurplusModel = getModel(req.year, "surplus");
+			const MovmentModel = getModel(req.year, "movment");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
+			const StationModel = getModel(req.year, "station");
 
 			// check if there is momvnets or shifts after
 			const currMovment = await MovmentModel.findByPk(req.body.movmentId, {
@@ -428,7 +416,16 @@ exports.spicialAddSurplus = catchAsync(async (req, res, next) => {
 });
 exports.deleteSurplus = catchAsync(async (req, res, next) => {
 	try {
-		const SurplusModel = getModel(req.headers["x-year"], "surplus");
+		const SurplusModel = getModel(req.year, "surplus");
+		const surplus = await SurplusModel.findByPk(req.params.id);
+		if (!surplus) {
+			return next(new AppError("السجل غير موجود", 404));
+		}
+		if (surplus.state === "approved" || surplus.state === "saved") {
+			return next(
+				new AppError("لا يمكن حذف الفائض لأن المناوبة محفوظة أو معتمدة", 400)
+			);
+		}
 		await SurplusModel.destroy({
 			where: { id: req.params.id },
 		});

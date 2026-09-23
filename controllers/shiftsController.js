@@ -6,7 +6,7 @@ const { getModel } = require("../utils/modelSelect");
 
 exports.getShiftsByStationId = catchAsync(async (req, res, next) => {
 	try {
-		const ShiftModel = getModel(req.headers["x-year"], "shift");
+		const ShiftModel = getModel(req.year, "shift");
 
 		const shifts = await ShiftModel.findAll({
 			where: {
@@ -23,11 +23,8 @@ exports.getShiftsByStationId = catchAsync(async (req, res, next) => {
 });
 exports.getLastShiftIdByMovmentId = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const MovmentsShiftsModel = getModel(
-			req.headers["x-year"],
-			"movments_shift"
-		);
+		const MovmentModel = getModel(req.year, "movment");
+		const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 		const movment = await MovmentModel.findByPk(+req.params.id);
 		const lastShift = await MovmentsShiftsModel.findOne({
 			where: {
@@ -46,10 +43,7 @@ exports.getLastShiftIdByMovmentId = catchAsync(async (req, res, next) => {
 });
 exports.getMovmentsShiftsByMovmentId = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentsShiftsModel = getModel(
-			req.headers["x-year"],
-			"movments_shift"
-		);
+		const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 		const shifts = await MovmentsShiftsModel.findAll({
 			where: {
 				movment_id: req.params.id,
@@ -66,25 +60,13 @@ exports.getMovmentsShiftsByMovmentId = catchAsync(async (req, res, next) => {
 exports.deleteShiftBYMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const DispenserMovmentModel = getModel(
-				req.headers["x-year"],
-				"dispenser_movment"
-			);
+			const MovmentModel = getModel(req.year, "movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
 
-			const BranchWithdrawalsModel = getModel(
-				req.headers["x-year"],
-				"branch_withdrawals"
-			);
-			const OtherModel = getModel(req.headers["x-year"], "other");
+			const BranchWithdrawalsModel = getModel(req.year, "branch_withdrawals");
+			const OtherModel = getModel(req.year, "other");
 
 			await req.db.transaction(async (t) => {
 				//check no shifts after
@@ -171,24 +153,15 @@ exports.getShiftDataByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
 		try {
 			await req.db.transaction(async (t) => {
-				const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-				const TankModel = getModel(req.headers["x-year"], "tank");
-				const SubstanceModel = getModel(req.headers["x-year"], "substance");
-				const DispenserMovmentModel = getModel(
-					req.headers["x-year"],
-					"dispenser_movment"
-				);
-				const StoreModel = getModel(req.headers["x-year"], "store");
-				const StoreMovmentModel = getModel(
-					req.headers["x-year"],
-					"store_movment"
-				);
-				const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
-				const BranchWithdrawalsModel = getModel(
-					req.headers["x-year"],
-					"branch_withdrawals"
-				);
-				const OtherModel = getModel(req.headers["x-year"], "other");
+				const DispenserModel = getModel(req.year, "dispenser");
+				const TankModel = getModel(req.year, "tank");
+				const SubstanceModel = getModel(req.year, "substance");
+				const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
+				const StoreModel = getModel(req.year, "store");
+				const StoreMovmentModel = getModel(req.year, "store_movment");
+				const CreditSaleModel = getModel(req.year, "credit_sale");
+				const BranchWithdrawalsModel = getModel(req.year, "branch_withdrawals");
+				const OtherModel = getModel(req.year, "other");
 
 				const dispensersMovment = await DispenserMovmentModel.findAll({
 					where: {

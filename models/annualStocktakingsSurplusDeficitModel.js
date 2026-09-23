@@ -31,6 +31,14 @@ function defineAnnualStocktakingSurplusDeficitModel(sequelize, models) {
 				type: DataTypes.INTEGER,
 				allowNull: false,
 			},
+			surplus_id: {
+				type: DataTypes.INTEGER,
+				allowNull: false,
+			},
+			deficit_id: {
+				type: DataTypes.INTEGER,
+				allowNull: false,
+			},
 		}
 	);
 	if (models) {

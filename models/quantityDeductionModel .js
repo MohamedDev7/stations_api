@@ -18,10 +18,10 @@ function defineQuantityDeductionModel(sequelize, models) {
 			type: DataTypes.DATEONLY,
 			allowNull: false,
 		},
-		substance_id: {
-			type: DataTypes.INTEGER,
-			allowNull: false,
-		},
+		// substance_id: {
+		// 	type: DataTypes.INTEGER,
+		// 	allowNull: false,
+		// },
 		amount: {
 			type: DataTypes.INTEGER,
 			allowNull: false,
@@ -41,6 +41,15 @@ function defineQuantityDeductionModel(sequelize, models) {
 		store_id: {
 			type: DataTypes.INTEGER,
 			allowNull: false,
+		},
+		with_value: {
+			type: DataTypes.INTEGER,
+			allowNull: false,
+		},
+		is_annual_stocktaking: {
+			type: DataTypes.INTEGER,
+			allowNull: false,
+			defaultValue: 0,
 		},
 	});
 	if (models) {

@@ -4,8 +4,8 @@ const { getModel } = require("../utils/modelSelect");
 const { Sequelize } = require("sequelize");
 exports.getAllEmployees = catchAsync(async (req, res, next) => {
 	try {
-		const EmployeeModel = getModel(req.headers["x-year"], "employee");
-		const StationModel = getModel(req.headers["x-year"], "station");
+		const EmployeeModel = getModel(req.year, "employee");
+		const StationModel = getModel(req.year, "station");
 		const employees = await EmployeeModel.findAll({
 			where: {
 				station_id: {
@@ -29,7 +29,7 @@ exports.getAllEmployees = catchAsync(async (req, res, next) => {
 });
 exports.getEmployee = catchAsync(async (req, res, next) => {
 	try {
-		const EmployeeModel = getModel(req.headers["x-year"], "employee");
+		const EmployeeModel = getModel(req.year, "employee");
 		const employee = await EmployeeModel.findByPk(req.params.id);
 		res.status(200).json({
 			state: "success",
@@ -41,7 +41,7 @@ exports.getEmployee = catchAsync(async (req, res, next) => {
 });
 exports.getEmployeesByStationId = catchAsync(async (req, res, next) => {
 	try {
-		const EmployeeModel = getModel(req.headers["x-year"], "employee");
+		const EmployeeModel = getModel(req.year, "employee");
 		const employees = await EmployeeModel.findAll({
 			where: {
 				station_id: req.params.id,
@@ -59,7 +59,7 @@ exports.getEmployeesByStationId = catchAsync(async (req, res, next) => {
 });
 exports.addEmployee = catchAsync(async (req, res, next) => {
 	try {
-		const EmployeeModel = getModel(req.headers["x-year"], "employee");
+		const EmployeeModel = getModel(req.year, "employee");
 		await EmployeeModel.create({
 			name: req.body.name,
 			station_id: req.body.station,
@@ -73,7 +73,7 @@ exports.addEmployee = catchAsync(async (req, res, next) => {
 });
 exports.deleteEmployee = catchAsync(async (req, res, next) => {
 	try {
-		const EmployeeModel = getModel(req.headers["x-year"], "employee");
+		const EmployeeModel = getModel(req.year, "employee");
 		await EmployeeModel.destroy({
 			where: { id: req.params.id },
 		});
@@ -87,7 +87,7 @@ exports.deleteEmployee = catchAsync(async (req, res, next) => {
 
 exports.updateEmployee = catchAsync(async (req, res, next) => {
 	try {
-		const EmployeeModel = getModel(req.headers["x-year"], "employee");
+		const EmployeeModel = getModel(req.year, "employee");
 		await EmployeeModel.update(
 			{ name: req.body.name, station_id: req.body.station },
 			{

@@ -11,7 +11,9 @@ router
 // 	// authController.restrictTo("editEmployee"),
 // 	employeesController.getEmployeesByStationId
 // );
-
+router
+	.route("/last/:station_id")
+	.get(depositsController.getLastDepositByStationId);
 router
 	.route("/:id")
 	.patch(depositsController.updateDeposit)

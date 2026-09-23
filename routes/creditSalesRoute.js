@@ -14,6 +14,10 @@ router
 	.post(creditSalesController.addCreditSalesSettlement);
 
 router
+	.route("/reports/detailed")
+	.get(creditSalesController.getDetailedCreditSalesReport);
+
+router
 	.route("/settlements/:id")
 
 	.delete(creditSalesController.deleteCreditSalesSettlement);

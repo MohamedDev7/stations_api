@@ -1,10 +1,9 @@
 const express = require("express");
 const stationsClosedMonthsController = require("./../controllers/stationsClosedMonthsController");
 const router = express.Router();
-router
-	.route("/:month")
-	.patch(stationsClosedMonthsController.changeState)
-	.get(stationsClosedMonthsController.getStateByMonth);
+router.route("/").get(stationsClosedMonthsController.getStationsState);
+router.route("/:month").patch(stationsClosedMonthsController.changeState);
+
 router.route("/").patch(stationsClosedMonthsController.changeState);
 
 // router

@@ -7,12 +7,9 @@ const notificationQueue = require("../queues/notificationQueue");
 
 exports.getAllMovments = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const MovmentsShiftsModel = getModel(
-			req.headers["x-year"],
-			"movments_shift"
-		);
+		const MovmentModel = getModel(req.year, "movment");
+		const StationModel = getModel(req.year, "station");
+		const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 		const stations = req.query.stations
 			? req.query.stations.split(",").filter((s) => s.length > 0)
 			: [];
@@ -21,6 +18,7 @@ exports.getAllMovments = catchAsync(async (req, res, next) => {
 				[Sequelize.Op.in]: stations.length > 0 ? stations : req.stations,
 			},
 		};
+
 		if (
 			req.query.startDate &&
 			req.query.startDate !== "null" &&
@@ -120,9 +118,9 @@ exports.getAllMovments = catchAsync(async (req, res, next) => {
 });
 exports.getOthersByMovmentIdAndShiftId = catchAsync(async (req, res, next) => {
 	try {
-		const OtherModel = getModel(req.headers["x-year"], "other");
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const OtherModel = getModel(req.year, "other");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 		const others = await OtherModel.findAll({
 			where: {
 				movment_id: req.params.movment_id,
@@ -151,7 +149,7 @@ exports.getOthersByMovmentIdAndShiftId = catchAsync(async (req, res, next) => {
 });
 exports.getMovmentsByStationId = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const MovmentModel = getModel(req.year, "movment");
 		const movments = await MovmentModel.findAll({
 			where: {
 				station_id: req.params.id,
@@ -167,7 +165,7 @@ exports.getMovmentsByStationId = catchAsync(async (req, res, next) => {
 });
 exports.getStationMovment = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const MovmentModel = getModel(req.year, "movment");
 		await req.db.transaction(async (t) => {
 			const movment = await MovmentModel.findOne({
 				where: {
@@ -189,11 +187,8 @@ exports.getStationMovment = catchAsync(async (req, res, next) => {
 });
 exports.getStationMovmentByDate = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const MovmentsShiftsModel = getModel(
-			req.headers["x-year"],
-			"movments_shift"
-		);
+		const MovmentModel = getModel(req.year, "movment");
+		const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 		await req.db.transaction(async (t) => {
 			const movment = await MovmentModel.findOne({
 				where: {
@@ -228,7 +223,7 @@ exports.getStationMovmentByDate = catchAsync(async (req, res, next) => {
 });
 exports.getStationPendingMovment = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const MovmentModel = getModel(req.year, "movment");
 		const pendingMovment = await MovmentModel.findAll({
 			where: { station_id: +req.params.id, state: "pending" },
 			order: [["createdAt", "DESC"]],
@@ -247,19 +242,17 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 	previousDay.setDate(currDate.getDate() - 1);
 	try {
 		await req.db.transaction(async (t) => {
-			const StationModel = getModel(req.headers["x-year"], "station");
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
+			const StationModel = getModel(req.year, "station");
+			const MovmentModel = getModel(req.year, "movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 			const SubstancePriceMovmentModel = getModel(
-				req.headers["x-year"],
-				"substance_price_movment"
+				req.year,
+				"substance_price_movment",
 			);
-			const StocktakingModel = getModel(req.headers["x-year"], "stocktaking");
-			const ShiftModel = getModel(req.headers["x-year"], "shift");
-			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+			const StocktakingModel = getModel(req.year, "stocktaking");
+			const ShiftModel = getModel(req.year, "shift");
+			const SurplusModel = getModel(req.year, "surplus");
+			const StoreModel = getModel(req.year, "store");
 
 			const station = await StationModel.findOne({
 				where: {
@@ -308,6 +301,11 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 				},
 				raw: true,
 			});
+			const stores = await StoreModel.findAll({
+				where: {
+					station_id: req.body.station_id,
+				},
+			});
 
 			if (priceMovment.length > 0) {
 				// Check if each price movement has a stocktaking
@@ -322,16 +320,17 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 							curr_price: movement.price,
 						},
 					});
-					if (!hasStocktaking) {
+					const stationHaveSubstance = stores.find(
+						(el) => el.substance_id === movement.substance_id,
+					);
+					if (!hasStocktaking && stationHaveSubstance) {
 						return next(
 							new AppError(
-								`لم يتم إجراء جرد بتاريخ ${
-									previousDay.toISOString().split("T")[0]
-								} عند تغير السعر من ${movement.prev_price} إلى ${
-									movement.price
+								`لم يتم إجراء جرد بتاريخ ${previousDay.toISOString().split("T")[0]
+								} عند تغير السعر من ${movement.prev_price} إلى ${movement.price
 								}`,
-								500
-							)
+								500,
+							),
 						);
 					}
 				}
@@ -346,7 +345,7 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 					state: "pending",
 					has_stocktaking: 0,
 				},
-				{ transaction: t, raw: true }
+				{ transaction: t, raw: true },
 			);
 
 			const shifts = ShiftModel.findAll({
@@ -390,7 +389,7 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 							},
 						},
 						transaction: t,
-					}
+					},
 				);
 			}
 
@@ -404,22 +403,13 @@ exports.addMovment = catchAsync(async (req, res, next) => {
 });
 exports.addShiftMovment = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentsShiftsModel = getModel(
-			req.headers["x-year"],
-			"movments_shift"
-		);
+		const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 		await req.db.transaction(async (t) => {
-			const DispenserMovmentModel = getModel(
-				req.headers["x-year"],
-				"dispenser_movment"
-			);
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const OtherModel = getModel(req.headers["x-year"], "other");
+			const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const OtherModel = getModel(req.year, "other");
 
-			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			const CreditSaleModel = getModel(req.year, "credit_sale");
 			const dispensersMovmentsArr = req.body.dispensers.map((el) => {
 				return {
 					prev_A: +el.prev_A,
@@ -458,7 +448,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 
 			const storesMovments = await StoreMovmentModel.bulkCreate(
 				storesMovmentsArr,
-				{ transaction: t }
+				{ transaction: t },
 			);
 
 			const othersArr = req.body.others.map((el) => {
@@ -515,7 +505,7 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 		});
 		await MovmentsShiftsModel.update(
 			{ state: req.body.state },
-			{ where: { id: req.body.shift.id } }
+			{ where: { id: req.body.shift.id } },
 		);
 		res.status(200).json({
 			state: "success",
@@ -527,21 +517,12 @@ exports.addShiftMovment = catchAsync(async (req, res, next) => {
 exports.editShiftMovment = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const DispenserMovmentModel = getModel(
-				req.headers["x-year"],
-				"dispenser_movment"
-			);
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const OtherModel = getModel(req.headers["x-year"], "other");
-			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
+			const MovmentModel = getModel(req.year, "movment");
+			const OtherModel = getModel(req.year, "other");
+			const CreditSaleModel = getModel(req.year, "credit_sale");
 			const currDate = new Date(req.body.date);
 			const nextDay = new Date(req.body.date);
 			nextDay.setDate(currDate.getDate() + 1);
@@ -560,7 +541,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 					{
 						where: { id: id },
 						transaction: t, // Condition to match the record by 'id'
-					}
+					},
 				);
 			}
 
@@ -592,7 +573,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 								movment_id: req.body.movment_id,
 							},
 							transaction: t,
-						}
+						},
 					);
 				}
 			} else {
@@ -622,7 +603,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 									movment_id: nextMovment.id,
 								},
 								transaction: t,
-							}
+							},
 						);
 					}
 				}
@@ -640,7 +621,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 					{
 						where: { id: id },
 						transaction: t, // Condition to match the record by 'id'
-					}
+					},
 				);
 			}
 
@@ -684,7 +665,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 								movment_id: req.body.movment_id,
 							},
 							transaction: t,
-						}
+						},
 					);
 				}
 			}
@@ -707,7 +688,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 								},
 							},
 							transaction: t,
-						}
+						},
 					);
 				}
 			}
@@ -721,7 +702,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 					othersToEdit.push({
 						store_id: el.store,
 						store_movment_id: req.body.currStoresMovments.filter(
-							(ele) => ele.store_id === el.store
+							(ele) => ele.store_id === el.store,
 						)[0].id,
 						amount: +el.amount,
 						type: el.type,
@@ -738,7 +719,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 						shift_id: req.body.shift.id,
 						store_id: el.store,
 						store_movment_id: req.body.currStoresMovments.filter(
-							(ele) => ele.store_id === el.store
+							(ele) => ele.store_id === el.store,
 						)[0].id,
 						amount: +el.amount,
 						type: el.type,
@@ -762,7 +743,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 				(dbOther) =>
 					!req.body.others
 						.filter((el) => el.db_id)
-						.some((reqOther) => reqOther.db_id === dbOther.id)
+						.some((reqOther) => reqOther.db_id === dbOther.id),
 			);
 			const othersToDeleteIds = othersToDelete.map((el) => el.id);
 			const updateOthersPromises = othersToEdit.map((el) => {
@@ -830,7 +811,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 				(dbCreditSale) =>
 					!req.body.creditSales
 						.filter((el) => el.db_id)
-						.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id)
+						.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id),
 			);
 
 			const creditSaleToDeleteIds = creditSalesToDelete.map((el) => el.id);
@@ -856,6 +837,7 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 			await CreditSaleModel.bulkCreate(creditSalesToAdd, {
 				transaction: t,
 			});
+
 			// //updating coupons
 			// let couponsToAdd = [];
 			// let couponsToEdit = [];
@@ -940,8 +922,9 @@ exports.editShiftMovment = catchAsync(async (req, res, next) => {
 					},
 					raw: true,
 					transaction: t,
-				}
+				},
 			);
+
 			res.status(200).json({
 				state: "success",
 			});
@@ -971,7 +954,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 					{
 						where: { id: id },
 						transaction: t, // Condition to match the record by 'id'
-					}
+					},
 				);
 			}
 
@@ -1003,7 +986,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 								movment_id: req.body.movment_id,
 							},
 							transaction: t,
-						}
+						},
 					);
 				}
 			} else {
@@ -1033,7 +1016,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 									movment_id: nextMovment.id,
 								},
 								transaction: t,
-							}
+							},
 						);
 					}
 				}
@@ -1050,7 +1033,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 					{
 						where: { id: id },
 						transaction: t, // Condition to match the record by 'id'
-					}
+					},
 				);
 			}
 
@@ -1098,7 +1081,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 								movment_id: req.body.movment_id,
 							},
 							transaction: t,
-						}
+						},
 					);
 				}
 			}
@@ -1121,7 +1104,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 								},
 							},
 							transaction: t,
-						}
+						},
 					);
 				}
 			}
@@ -1135,7 +1118,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 					othersToEdit.push({
 						store_id: el.store,
 						store_movment_id: req.body.currStoresMovments.filter(
-							(ele) => ele.store_id === el.store
+							(ele) => ele.store_id === el.store,
 						)[0].id,
 						amount: +el.amount,
 						type: el.type,
@@ -1152,7 +1135,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 						shift_id: req.body.shift.id,
 						store_id: el.store,
 						store_movment_id: req.body.currStoresMovments.filter(
-							(ele) => ele.store_id === el.store
+							(ele) => ele.store_id === el.store,
 						)[0].id,
 						amount: +el.amount,
 						type: el.type,
@@ -1176,7 +1159,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 				(dbOther) =>
 					!req.body.others
 						.filter((el) => el.db_id)
-						.some((reqOther) => reqOther.db_id === dbOther.id)
+						.some((reqOther) => reqOther.db_id === dbOther.id),
 			);
 			const othersToDeleteIds = othersToDelete.map((el) => el.id);
 			const updateOthersPromises = othersToEdit.map((el) => {
@@ -1244,7 +1227,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 				(dbCreditSale) =>
 					!req.body.creditSales
 						.filter((el) => el.db_id)
-						.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id)
+						.some((reqCreditSale) => reqCreditSale.db_id === dbCreditSale.id),
 			);
 
 			const creditSaleToDeleteIds = creditSalesToDelete.map((el) => el.id);
@@ -1354,7 +1337,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 					},
 					raw: true,
 					transaction: t,
-				}
+				},
 			);
 			res.status(200).json({
 				state: "success",
@@ -1366,7 +1349,7 @@ exports.spicialEditShiftMovment = catchAsync(async (req, res, next) => {
 });
 exports.deleteMovment = catchAsync(async (req, res, next) => {
 	try {
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const MovmentModel = getModel(req.year, "movment");
 		await MovmentModel.destroy({
 			where: {
 				id: req.params.id,
@@ -1382,33 +1365,21 @@ exports.deleteMovment = catchAsync(async (req, res, next) => {
 exports.changeMovmentState = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const StationModel = getModel(req.headers["x-year"], "station");
-			const UserStationModel = getModel(req.headers["x-year"], "user_station");
-			const UserModel = getModel(req.headers["x-year"], "user");
-			const StoreModel = getModel(req.headers["x-year"], "store");
-			const SubstanceModel = getModel(req.headers["x-year"], "substance");
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
-			const DispenserMovmentModel = getModel(
-				req.headers["x-year"],
-				"dispenser_movment"
-			);
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const IncomeModel = getModel(req.headers["x-year"], "income");
-			const calibrationModel = getModel(req.headers["x-year"], "calibration");
-			const SurplusModel = getModel(req.headers["x-year"], "surplus");
-			const BranchWithdrawalsModel = getModel(
-				req.headers["x-year"],
-				"branch_withdrawals"
-			);
-			const OtherModel = getModel(req.headers["x-year"], "other");
-			const PermissionModel = getModel(req.headers["x-year"], "permission");
+			const MovmentModel = getModel(req.year, "movment");
+			const StationModel = getModel(req.year, "station");
+			const UserStationModel = getModel(req.year, "user_station");
+			const UserModel = getModel(req.year, "user");
+			const StoreModel = getModel(req.year, "store");
+			const SubstanceModel = getModel(req.year, "substance");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
+			const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const IncomeModel = getModel(req.year, "income");
+			const calibrationModel = getModel(req.year, "calibration");
+			const SurplusModel = getModel(req.year, "surplus");
+			const BranchWithdrawalsModel = getModel(req.year, "branch_withdrawals");
+			const OtherModel = getModel(req.year, "other");
+			const PermissionModel = getModel(req.year, "permission");
 			if (req.body.state === "pending") {
 				// التحقق من وجود حركة معلقة
 				const checkPendingMovment = await MovmentModel.findOne({
@@ -1417,6 +1388,20 @@ exports.changeMovmentState = catchAsync(async (req, res, next) => {
 				});
 				if (checkPendingMovment) {
 					return next(new AppError("لا يمكن فتح أكثر من حركة بنفس الوقت", 500));
+				}
+
+				const StocktakingModel = getModel(req.year, "stocktaking");
+				const subsequentStocktaking = await StocktakingModel.findOne({
+					where: {
+						station_id: req.body.station_id,
+						date: { [Op.gte]: req.body.date },
+					},
+				});
+
+				if (subsequentStocktaking) {
+					return next(
+						new AppError("لا يمكن فتح الحركة لوجود جرد مسجل بعدها", 400)
+					);
 				}
 
 				// تحديث الحالات لبقية الجداول
@@ -1435,41 +1420,41 @@ exports.changeMovmentState = catchAsync(async (req, res, next) => {
 
 				await MovmentModel.update(
 					{ state: req.body.state },
-					{ where: { id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 
 				// استكمال التحديث لبقية الجداول إذا لزم الأمر:
 				await DispenserMovmentModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await StoreMovmentModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await MovmentsShiftsModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await IncomeModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await calibrationModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await SurplusModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await BranchWithdrawalsModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await OtherModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 
 				const movmentsLines = movments
@@ -1518,14 +1503,14 @@ exports.changeMovmentState = catchAsync(async (req, res, next) => {
 					return next(
 						new AppError(
 							"لا يمكن تأكيد الحركة لوجود حركة معلقة بتاريخ سابق",
-							500
-						)
+							500,
+						),
 					);
 				}
 
 				await MovmentModel.update(
 					{ state: req.body.state },
-					{ where: { id: req.body.movment_id }, transaction: t }
+					{ where: { id: req.body.movment_id }, transaction: t },
 				);
 				// إرسال إشعار عبر WhatsApp
 				const movment = await MovmentModel.findByPk(req.body.movment_id, {
@@ -1557,18 +1542,17 @@ exports.changeMovmentState = catchAsync(async (req, res, next) => {
 						const storeName = store["store.name"];
 						let income = 0;
 						const filteredIncomes = incomes.filter(
-							(el) => el.store_id === store.store_id
+							(el) => el.store_id === store.store_id,
 						);
 						filteredIncomes.forEach((el) => (income = income + el.amount));
 						const value = store.curr_value;
 						const sales = store.prev_value + income - store.curr_value;
 
 						const substance = store["store.substance.name"];
-						return `${storeName}-${substance}:\nالمبيعات:${sales}لتر${
-							store.deficit > 0
-								? `\nالرصيد الدفتري:${value}لتر\nالعجز:${store.deficit}لتر`
-								: ""
-						}\nالرصيد الفعلي:${value - store.deficit}لتر`;
+						return `${storeName}-${substance}:\nالمبيعات:${sales}لتر${store.deficit > 0
+							? `\nالرصيد الدفتري:${value}لتر\nالعجز:${store.deficit}لتر`
+							: ""
+							}\nالرصيد الفعلي:${value - store.deficit}لتر`;
 					})
 					.join("\n===============\n");
 
@@ -1598,23 +1582,23 @@ exports.changeMovmentState = catchAsync(async (req, res, next) => {
 				}
 				await IncomeModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await calibrationModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await SurplusModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await BranchWithdrawalsModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await OtherModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 			}
 			res.status(200).json({
@@ -1658,41 +1642,41 @@ exports.spicialChangeMovmentState = catchAsync(async (req, res, next) => {
 
 				await MovmentModel.update(
 					{ state: req.body.state },
-					{ where: { id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 
 				// استكمال التحديث لبقية الجداول إذا لزم الأمر:
 				await DispenserMovmentModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await StoreMovmentModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await MovmentsShiftsModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await IncomeModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await calibrationModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await SurplusModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await BranchWithdrawalsModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 				await OtherModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t }
+					{ where: { movment_id: { [Op.in]: movmentsIds } }, transaction: t },
 				);
 
 				const movmentsLines = movments
@@ -1741,14 +1725,14 @@ exports.spicialChangeMovmentState = catchAsync(async (req, res, next) => {
 					return next(
 						new AppError(
 							"لا يمكن تأكيد الحركة لوجود حركة معلقة بتاريخ سابق",
-							500
-						)
+							500,
+						),
 					);
 				}
 
 				await MovmentModel.update(
 					{ state: req.body.state },
-					{ where: { id: req.body.movment_id }, transaction: t }
+					{ where: { id: req.body.movment_id }, transaction: t },
 				);
 				// إرسال إشعار عبر WhatsApp
 				const movment = await MovmentModel.findByPk(req.body.movment_id, {
@@ -1780,18 +1764,17 @@ exports.spicialChangeMovmentState = catchAsync(async (req, res, next) => {
 						const storeName = store["store.name"];
 						let income = 0;
 						const filteredIncomes = incomes.filter(
-							(el) => el.store_id === store.store_id
+							(el) => el.store_id === store.store_id,
 						);
 						filteredIncomes.forEach((el) => (income = income + el.amount));
 						const value = store.curr_value;
 						const sales = store.prev_value + income - store.curr_value;
 
 						const substance = store["store.substance.name"];
-						return `${storeName}-${substance}:\nالمبيعات:${sales}لتر${
-							store.deficit > 0
-								? `\nالرصيد الدفتري:${value}لتر\nالعجز:${store.deficit}لتر`
-								: ""
-						}\nالرصيد الفعلي:${value - store.deficit}لتر`;
+						return `${storeName}-${substance}:\nالمبيعات:${sales}لتر${store.deficit > 0
+							? `\nالرصيد الدفتري:${value}لتر\nالعجز:${store.deficit}لتر`
+							: ""
+							}\nالرصيد الفعلي:${value - store.deficit}لتر`;
 					})
 					.join("\n===============\n");
 
@@ -1821,23 +1804,23 @@ exports.spicialChangeMovmentState = catchAsync(async (req, res, next) => {
 				}
 				await IncomeModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await calibrationModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await SurplusModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await BranchWithdrawalsModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 				await OtherModel.update(
 					{ state: req.body.state },
-					{ where: { movment_id: req.body.movment_id }, transaction: t }
+					{ where: { movment_id: req.body.movment_id }, transaction: t },
 				);
 			}
 			res.status(200).json({
@@ -1853,30 +1836,21 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 		let dispensersMovment = [];
 		let storesMovment = [];
 		await req.db.transaction(async (t) => {
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
-			const DispenserModel = getModel(req.headers["x-year"], "dispenser");
-			const DispenserMovmentModel = getModel(
-				req.headers["x-year"],
-				"dispenser_movment"
-			);
-			const StoreModel = getModel(req.headers["x-year"], "store");
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const SubstanceModel = getModel(req.headers["x-year"], "substance");
-			const TankModel = getModel(req.headers["x-year"], "tank");
-			const IncomeModel = getModel(req.headers["x-year"], "income");
-			const calibrationModel = getModel(req.headers["x-year"], "calibration");
-			const SurplusModel = getModel(req.headers["x-year"], "surplus");
+			const MovmentModel = getModel(req.year, "movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
+			const DispenserModel = getModel(req.year, "dispenser");
+			const DispenserMovmentModel = getModel(req.year, "dispenser_movment");
+			const StoreModel = getModel(req.year, "store");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const SubstanceModel = getModel(req.year, "substance");
+			const TankModel = getModel(req.year, "tank");
+			const IncomeModel = getModel(req.year, "income");
+			const calibrationModel = getModel(req.year, "calibration");
+			const SurplusModel = getModel(req.year, "surplus");
 
-			const OtherModel = getModel(req.headers["x-year"], "other");
-			const ClientModel = getModel(req.headers["x-year"], "client");
-			const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
+			const OtherModel = getModel(req.year, "other");
+			const ClientModel = getModel(req.year, "client");
+			const CreditSaleModel = getModel(req.year, "credit_sale");
 
 			const movment = await MovmentModel.findOne({
 				where: {
@@ -1982,7 +1956,7 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 
 				dispensersMovment = dispensersMovments2.map((el) => {
 					const data = dispensersMovments1.filter(
-						(ele) => ele.dispenser_id === el.dispenser_id
+						(ele) => ele.dispenser_id === el.dispenser_id,
 					)[0];
 					return {
 						id: el.id,
@@ -1997,7 +1971,7 @@ exports.getMovmentReport = catchAsync(async (req, res, next) => {
 				});
 				storesMovment = storesMovments2.map((el) => {
 					const data = storesMovments1.filter(
-						(ele) => ele.store_id === el.store_id
+						(ele) => ele.store_id === el.store_id,
 					)[0];
 
 					return {

@@ -1,4 +1,6 @@
 const express = require("express");
+// const session = require("express-session");
+// const SequelizeStore = require("connect-session-sequelize")(session.Store);
 const globalErrorHandler = require("./controllers/errorController");
 const authRouter = require("./routes/authRoutes");
 const userRouter = require("./routes/userRoutes");
@@ -25,29 +27,58 @@ const clientsRouter = require("./routes/clientsRoute");
 const notificationsRouter = require("./routes/notificationsRoute");
 const quantityDeductionsRouter = require("./routes/quantityDeductionsRoutes");
 const stationsClosedMonthsRouter = require("./routes/stationsClosedMonthsRoute");
+const financialOperationsRouter = require("./routes/financialOperationsRoute");
 const { selectDbMiddleware } = require("./controllers/dbSelectController");
 const annualStocktakingRouter = require("./routes/annualStocktakingRoutes");
+// const { sequelizeStations } = require("./connection");
+// const { getModel } = require("./utils/modelSelect");
+
 const cors = require("cors");
 const AppError = require("./utils/appError");
 const corsOptions = {
-	origin: "*",
-	// "Access-Control-Allow-Credentials": true,
-	// optionSuccessStatus: 200,
-	credentials: false,
+	origin: function (origin, callback) {
+		// Allow requests with no origin (like Electron apps, mobile apps, curl, etc.)
+		if (!origin) return callback(null, true);
+		// Allow all origins for now - adjust as needed for security
+		return callback(null, true);
+	},
+	credentials: true,
+	allowedHeaders: ["Content-Type", "Authorization", "x-year", "AppVersion"],
 };
 
-// Get a list of available devices
+// SESSION CODE COMMENTED OUT - Using JWT tokens instead
+// const SessionModel = getModel(process.env.YEAR, "session");
+// const sessionStore = new SequelizeStore({
+// 	db: sequelizeStations,
+// 	table: SessionModel,
+// 	checkExpirationInterval: 0,
+// });
+// SessionModel.sync({ alter: true });
+
 const app = express();
-app.use((req, res, next) => {
-	res.header("Access-Control-Allow-Credentials", true);
-	next();
-});
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// SESSION MIDDLEWARE COMMENTED OUT - Using JWT tokens instead
+// app.use(
+// 	session({
+// 		secret: process.env.SESSION_SECRET || process.env.JWT_SECRET,
+// 		store: sessionStore,
+// 		resave: false,
+// 		saveUninitialized: false,
+// 		cookie: {
+// 			secure: false,
+// 			httpOnly: true,
+// 			sameSite: false,
+// 			maxAge: 10 * 365 * 24 * 60 * 60 * 1000,
+// 		},
+// 	})
+// );
+
 app.use("/api/v1/auth", authRouter);
+app.use("/*", selectDbMiddleware); // Set req.year from header/query/body first
 app.all("/*", authController.protect);
 app.all("/*", authController.restrictToStations);
-app.use("/*", selectDbMiddleware);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/substances", substancesRouter);
 app.use("/api/v1/stations", stationsRouter);
@@ -71,6 +102,7 @@ app.use("/api/v1/clients", clientsRouter);
 app.use("/api/v1/notifications", notificationsRouter);
 app.use("/api/v1/quantityDeductions", quantityDeductionsRouter);
 app.use("/api/v1/closing", stationsClosedMonthsRouter);
+app.use("/api/v1/financialOperations", financialOperationsRouter);
 app.use("/api/v1/annualStocktaking", annualStocktakingRouter);
 
 app.all("/*", (req, res, next) => {

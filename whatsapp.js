@@ -5,20 +5,32 @@ if (!global.crypto) {
 		subtle: crypto.webcrypto.subtle,
 	};
 }
-const {
-	default: makeWASocket,
-	useMultiFileAuthState,
-	fetchLatestBaileysVersion,
-	DisconnectReason,
-} = require("@whiskeysockets/baileys");
 const path = require("path");
 const fs = require("fs");
+const qrcode = require("qrcode-terminal");
 
 let sock = null;
 let initialized = false;
+let baileysModule = null;
+let initPromise = null;
+let connectionResolve = null;
 
-async function initializeBaileys() {
-	if (initialized && sock) return sock;
+// Load baileys module dynamically (ES Module)
+async function loadBaileys() {
+	if (!baileysModule) {
+		baileysModule = await import("baileys");
+	}
+	return baileysModule;
+}
+
+async function createSocket() {
+	const baileys = await loadBaileys();
+	const {
+		default: makeWASocket,
+		useMultiFileAuthState,
+		fetchLatestBaileysVersion,
+		DisconnectReason,
+	} = baileys;
 
 	const authFolder = path.join(__dirname, "baileys_auth");
 	const { state, saveCreds } = await useMultiFileAuthState(authFolder);
@@ -27,29 +39,63 @@ async function initializeBaileys() {
 	sock = makeWASocket({
 		version,
 		auth: state,
-		printQRInTerminal: true,
 	});
 
 	sock.ev.on("creds.update", saveCreds);
 
-	sock.ev.on("connection.update", (update) => {
-		const { connection, lastDisconnect } = update;
+	sock.ev.on("connection.update", async (update) => {
+		const { connection, lastDisconnect, qr } = update;
+
+		// Handle QR code manually (printQRInTerminal is deprecated)
+		if (qr) {
+			console.log("QR Code received. Scan with WhatsApp:");
+			qrcode.generate(qr, { small: true });
+		}
+
 		if (connection === "close") {
-			const shouldReconnect =
-				lastDisconnect?.error?.output?.statusCode !==
-				DisconnectReason.loggedOut;
-			console.log(`Connection closed, should reconnect: ${shouldReconnect}`);
-			if (shouldReconnect) {
-				initialized = false; // Allow re-initialization
-				initializeBaileys().catch(console.error);
+			const statusCode = lastDisconnect?.error?.output?.statusCode;
+			const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+
+			console.log("Connection closed:", {
+				statusCode,
+				isLoggedOut,
+			});
+
+			// Auto-reconnect unless logged out
+			if (!isLoggedOut) {
+				console.log("Reconnecting to WhatsApp...");
+				initialized = false;
+				sock = null;
+				setTimeout(() => {
+					createSocket();
+				}, 3000);
 			}
 		} else if (connection === "open") {
 			console.log("Connected to WhatsApp");
+			initialized = true;
+			// Resolve the pending promise
+			if (connectionResolve) {
+				connectionResolve(sock);
+				connectionResolve = null;
+			}
 		}
 	});
+}
 
-	initialized = true;
-	return sock;
+async function initializeBaileys() {
+	// If already initialized, return the socket
+	if (initialized && sock) return sock;
+
+	// If already initializing, return the existing promise
+	if (initPromise) return initPromise;
+
+	// Create a new promise for the initialization
+	initPromise = new Promise(async (resolve) => {
+		connectionResolve = resolve;
+		await createSocket();
+	});
+
+	return initPromise;
 }
 
 /**

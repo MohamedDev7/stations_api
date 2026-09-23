@@ -6,11 +6,11 @@ const { getModel } = require("../utils/modelSelect");
 
 exports.getAllIncomes = catchAsync(async (req, res, next) => {
 	try {
-		const IncomeModel = getModel(req.headers["x-year"], "income");
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const IncomeModel = getModel(req.year, "income");
+		const StationModel = getModel(req.year, "station");
+		const MovmentModel = getModel(req.year, "movment");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 		const stations = req.query.stations
 			? req.query.stations.split(",").filter((s) => s.length > 0)
 			: [];
@@ -85,9 +85,9 @@ exports.getAllIncomes = catchAsync(async (req, res, next) => {
 });
 exports.getIncomesByMovmentIdAndShiftId = catchAsync(async (req, res, next) => {
 	try {
-		const IncomeModel = getModel(req.headers["x-year"], "income");
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const IncomeModel = getModel(req.year, "income");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 		const incomes = await IncomeModel.findAll({
 			where: {
 				movment_id: req.params.movment_id,
@@ -116,19 +116,40 @@ exports.getIncomesByMovmentIdAndShiftId = catchAsync(async (req, res, next) => {
 		return next(new AppError(error, 500));
 	}
 });
+exports.getLastIncomeByStationId = catchAsync(async (req, res, next) => {
+	try {
+		const IncomeModel = getModel(req.year, "income");
+		const MovmentModel = getModel(req.year, "movment");
+		const income = await IncomeModel.findOne({
+			where: {
+				station_id: req.params.station_id,
+			},
+			include: [
+				{
+					model: MovmentModel,
+					attributes: ["date"],
+				},
+			],
+			order: [
+				[MovmentModel, "date", "DESC"],
+				["id", "DESC"],
+			],
+		});
+		res.status(200).json({
+			state: "success",
+			income,
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
 exports.addIncome = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const IncomeModel = getModel(req.headers["x-year"], "income");
-			const MovmentModel = getModel(req.headers["x-year"], "movment");
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const MovmentsShiftsModel = getModel(
-				req.headers["x-year"],
-				"movments_shift"
-			);
+			const IncomeModel = getModel(req.year, "income");
+			const MovmentModel = getModel(req.year, "movment");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const MovmentsShiftsModel = getModel(req.year, "movments_shift");
 
 			// check if there is momvnets or shifts after
 			const currMovment = await MovmentModel.findByPk(req.body.movmentId, {
@@ -396,12 +417,14 @@ exports.spicialAddIncome = catchAsync(async (req, res, next) => {
 });
 exports.deleteIncome = catchAsync(async (req, res, next) => {
 	try {
-		const IncomeModel = getModel(req.headers["x-year"], "income");
+		const IncomeModel = getModel(req.year, "income");
 		await req.db.transaction(async (t) => {
 			// check income state
 			const income = await IncomeModel.findByPk(req.params.id);
-			if (income.state === "approved") {
-				return next(new AppError("لا يمكن حذف الوارد", 500));
+			if (income.state === "approved" || income.state === "saved") {
+				return next(
+					new AppError("لا يمكن حذف الوارد لأن المناوبة محفوظة أو معتمدة", 400)
+				);
 			}
 			await IncomeModel.destroy({
 				where: {

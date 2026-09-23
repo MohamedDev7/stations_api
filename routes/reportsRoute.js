@@ -7,6 +7,9 @@ router
 	.route("/storesMovmentSummary")
 	.get(reportsController.getStoresMovmentSummaryInPeriod);
 router
+	.route("/storesMovmentSummaryByPrice")
+	.get(reportsController.getStoresMovmentSummaryByPriceInPeriod);
+router
 	.route("/accountStatement/employee")
 	.get(reportsController.getEmployeeAccountStatementReport);
 router
@@ -27,9 +30,7 @@ router
 router
 	.route("/incomesMovment")
 	.get(reportsController.getIncomesMovmentInPeriod);
-router
-	.route("/creditSales")
-	.get(reportsController.getCreditSalesByStoreIdAndClientsIds);
+router.route("/creditSales").get(reportsController.getCreditSalesReport);
 router
 	.route("/depositsMovment")
 	.get(reportsController.getDepositsMovmentInPeriod);
@@ -48,4 +49,7 @@ router
 router
 	.route("/annualStocktaking/:id")
 	.get(reportsController.getAnnualStocktakingReport);
+router
+	.route("/financialBalance")
+	.get(reportsController.getFinancialBalanceReport);
 module.exports = router;

@@ -1,1 +1,4 @@
+baileys_auth
 baileys_auth/
+**/baileys_auth
+**/baileys_auth/**

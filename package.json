@@ -4,23 +4,25 @@
 	"description": "",
 	"main": "server.js",
 	"scripts": {
-		"start": "nodemon server.js",
-		"build": "ncc build  -o build/lib ./server.js && pkg --target node18-win-x64 -o server.exe ./build/lib/index.js"
+		"start": "nodemon server.js"
 	},
 	"dependencies": {
-		"@whiskeysockets/baileys": "^6.17.16",
 		"axios": "^1.7.2",
+		"baileys": "^7.0.0-rc.9",
 		"bcryptjs": "^2.4.3",
 		"bree": "^9.2.4",
 		"bullmq": "^5.49.1",
+		"connect-session-sequelize": "^8.0.4",
 		"cookie-parser": "^1.4.6",
 		"cors": "^2.8.5",
 		"dotenv": "^16.3.1",
 		"express": "^4.18.2",
+		"express-session": "^1.18.2",
 		"jsonwebtoken": "^9.0.2",
 		"multer": "^2.0.2",
 		"mysql2": "^3.11.3",
 		"nodemon": "^3.0.2",
+		"qrcode-terminal": "^0.12.0",
 		"sequelize": "^6.37.3"
 	},
 	"author": "",
@@ -30,5 +32,12 @@
 	},
 	"devDependencies": {
 		"@vercel/ncc": "latest"
+	},
+	"nodemonConfig": {
+		"ignore": [
+			"baileys_auth",
+			"baileys_auth/**"
+		],
+		"delay": "2"
 	}
 }

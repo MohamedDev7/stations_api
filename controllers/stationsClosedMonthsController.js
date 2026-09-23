@@ -2,67 +2,84 @@ const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/appError");
 const { getModel } = require("../utils/modelSelect");
 
-exports.getStateByMonth = catchAsync(async (req, res, next) => {
+exports.getStationsState = catchAsync(async (req, res, next) => {
 	try {
-		const StationModel = getModel(req.headers["x-year"], "station");
 		const stationsClosedMonthModel = getModel(
-			req.headers["x-year"],
-			"stations_closed_month"
+			req.year,
+			"stations_closed_month",
 		);
+		const StationModel = getModel(req.year, "station");
+
+		// 1) كل المحطات (أساس الإخراج)
 		const stations = await StationModel.findAll({
-			raw: true,
+			attributes: ["id", "name", "number"],
 			order: [["number", "ASC"]],
-		});
-		const months = await stationsClosedMonthModel.findAll({
-			where: { month: +req.params.month },
-			include: [
-				{
-					model: StationModel,
-					attributes: ["id"],
-				},
-			],
 			raw: true,
 		});
 
-		stations.forEach((station) => {
-			const month = months.find((el) => el.station_id === station.id);
-
-			station.isClosed = month ? month.isClosed : 0;
+		// 2) كل بيانات الإغلاق (قد تكون فارغة)
+		const closedMonths = await stationsClosedMonthModel.findAll({
+			attributes: ["station_id", "month", "isClosed"],
+			raw: true,
 		});
 
-		res.status(200).json({
+		// 3) Index: station_id -> month -> isClosed
+		const closedIndex = new Map();
+		for (const row of closedMonths) {
+			const sid = row.station_id;
+			const m = Number(row.month);
+
+			if (!closedIndex.has(sid)) closedIndex.set(sid, new Map());
+			closedIndex.get(sid).set(m, row.isClosed);
+		}
+
+		// 4) نفس المخرجات المطلوبة تمامًا + 12 شهر لكل محطة
+		const groupedByStation = stations.map((s) => {
+			const monthsMap = closedIndex.get(s.id);
+
+			const months = Array.from({ length: 12 }, (_, i) => {
+				const month = i + 1;
+				const isClosed =
+					monthsMap && monthsMap.has(month) ? monthsMap.get(month) : false;
+
+				return { month, isClosed };
+			});
+
+			return {
+				station_id: s.id,
+				station_name: s.name,
+				station_number: s.number,
+				months,
+			};
+		});
+
+		return res.status(200).json({
 			state: "success",
-			stations,
+			closedMonths: groupedByStation,
 		});
 	} catch (error) {
 		return next(new AppError(error, 500));
 	}
 });
-exports.changeState = catchAsync(async (req, res, next) => {
-	const { stations, month, isClosed } = req.body;
 
-	if (stations.length === 0 || !month) {
-		return next(new AppError("الرجاء تمرير قائمة المحطات والشهر صحيح", 400));
-	}
+exports.changeState = catchAsync(async (req, res, next) => {
+	const { station_id, month, isClosed } = req.body;
 	try {
 		const stationsClosedMonthModel = getModel(
-			req.headers["x-year"],
-			"stations_closed_month"
+			req.year,
+			"stations_closed_month",
 		);
-		const promises = stations.map(async (station_id) => {
-			const [record, created] = await stationsClosedMonthModel.findOrCreate({
-				where: { station_id, month },
-				defaults: { isClosed },
-			});
 
-			// Update only if value is different
-			if (!created && record.isClosed !== isClosed) {
-				record.isClosed = isClosed;
-				await record.save();
-			}
+		const [record, created] = await stationsClosedMonthModel.findOrCreate({
+			where: { station_id, month },
+			defaults: { isClosed },
 		});
 
-		await Promise.all(promises);
+		// Update only if not created and value is different
+		if (!created && record.isClosed !== isClosed) {
+			record.isClosed = isClosed;
+			await record.save();
+		}
 
 		res.status(200).json({
 			status: "success",

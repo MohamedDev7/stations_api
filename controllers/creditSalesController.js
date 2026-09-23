@@ -7,9 +7,9 @@ const { getModel } = require("../utils/modelSelect");
 
 exports.getAllCreditSales = catchAsync(async (req, res, next) => {
 	try {
-		const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
-		const StationModel = getModel(req.headers["x-year"], "station");
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
+		const CreditSaleModel = getModel(req.year, "credit_sale");
+		const StationModel = getModel(req.year, "station");
+		const MovmentModel = getModel(req.year, "movment");
 		const creditSales = await CreditSaleModel.findAll({
 			where: {
 				station_id: {
@@ -49,10 +49,10 @@ exports.getAllCreditSales = catchAsync(async (req, res, next) => {
 });
 exports.getUnPaidCreditSalesByStationIdAndStoreIdAndClientId = catchAsync(
 	async (req, res, next) => {
-		const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
-		const MovmentModel = getModel(req.headers["x-year"], "movment");
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const CreditSaleModel = getModel(req.year, "credit_sale");
+		const MovmentModel = getModel(req.year, "movment");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 
 		try {
 			const creditSales = await CreditSaleModel.findAll({
@@ -93,13 +93,13 @@ exports.getUnPaidCreditSalesByStationIdAndStoreIdAndClientId = catchAsync(
 exports.addCreditSalesSettlement = catchAsync(async (req, res, next) => {
 	try {
 		const CreditSaleSettlementModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"credit_sale_settlement"
 		);
-		const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
-		const OtherModel = getModel(req.headers["x-year"], "other");
+		const CreditSaleModel = getModel(req.year, "credit_sale");
+		const OtherModel = getModel(req.year, "other");
 		const stationsClosedMonthModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"stations_closed_month"
 		);
 
@@ -175,10 +175,10 @@ exports.addCreditSalesSettlement = catchAsync(async (req, res, next) => {
 exports.getAllCreditSalesSettlements = catchAsync(async (req, res, next) => {
 	try {
 		const CreditSaleSettlementModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"credit_sale_settlement"
 		);
-		const StationModel = getModel(req.headers["x-year"], "station");
+		const StationModel = getModel(req.year, "station");
 		const creditSalesSettlements = await CreditSaleSettlementModel.findAll({
 			where: {
 				station_id: {
@@ -215,13 +215,13 @@ exports.getAllCreditSalesSettlements = catchAsync(async (req, res, next) => {
 exports.deleteCreditSalesSettlement = catchAsync(async (req, res, next) => {
 	try {
 		const CreditSaleSettlementModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"credit_sale_settlement"
 		);
-		const CreditSaleModel = getModel(req.headers["x-year"], "credit_sale");
-		const OtherModel = getModel(req.headers["x-year"], "other");
+		const CreditSaleModel = getModel(req.year, "credit_sale");
+		const OtherModel = getModel(req.year, "other");
 		const stationsClosedMonthModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"stations_closed_month"
 		);
 		const CreditSalesSettlement = await CreditSaleSettlementModel.findByPk(
@@ -270,6 +270,78 @@ exports.deleteCreditSalesSettlement = catchAsync(async (req, res, next) => {
 
 		res.status(200).json({
 			state: "success",
+		});
+	} catch (error) {
+		return next(new AppError(error, 500));
+	}
+});
+exports.getDetailedCreditSalesReport = catchAsync(async (req, res, next) => {
+	try {
+		const CreditSaleModel = getModel(req.year, "credit_sale");
+		const StationModel = getModel(req.year, "station");
+		const MovmentModel = getModel(req.year, "movment");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
+		const CreditSaleSettlementModel = getModel(
+			req.year,
+			"credit_sale_settlement"
+		);
+		const ClientModel = getModel(req.year, "client");
+
+		const { startDate, endDate, stationId, clientId } = req.query;
+
+		const whereConditions = {};
+		if (stationId) whereConditions.station_id = stationId;
+		if (clientId) whereConditions.client_id = clientId;
+
+		const movmentWhere = {};
+		if (startDate && endDate) {
+			movmentWhere.date = {
+				[Op.between]: [startDate, endDate],
+			};
+		} else if (startDate) {
+			movmentWhere.date = { [Op.gte]: startDate };
+		} else if (endDate) {
+			movmentWhere.date = { [Op.lte]: endDate };
+		}
+
+		const creditSales = await CreditSaleModel.findAll({
+			where: whereConditions,
+			include: [
+				{
+					model: StationModel,
+					attributes: ["name"],
+				},
+				{
+					model: MovmentModel,
+					where: movmentWhere,
+					attributes: ["date"],
+				},
+				{
+					model: StoreModel,
+					attributes: ["name"],
+					include: [
+						{
+							model: SubstanceModel,
+							attributes: ["name"],
+						},
+					],
+				},
+				{
+					model: CreditSaleSettlementModel,
+					attributes: ["date"],
+				},
+				{
+					model: ClientModel,
+					attributes: ["name"],
+				},
+			],
+			order: [[MovmentModel, "date", "ASC"]],
+		});
+
+		res.status(200).json({
+			state: "success",
+			creditSales,
 		});
 	} catch (error) {
 		return next(new AppError(error, 500));

@@ -3,7 +3,7 @@ const AppError = require("../utils/appError");
 const { getModel } = require("../utils/modelSelect");
 
 exports.getAllBanks = catchAsync(async (req, res, next) => {
-	const BanksModel = getModel(req.headers["x-year"], "bank");
+	const BanksModel = getModel(req.year, "bank");
 	try {
 		const banks = await BanksModel.findAll({});
 		res.status(200).json({
@@ -15,7 +15,7 @@ exports.getAllBanks = catchAsync(async (req, res, next) => {
 	}
 });
 exports.addBank = catchAsync(async (req, res, next) => {
-	const BanksModel = getModel(req.headers["x-year"], "bank");
+	const BanksModel = getModel(req.year, "bank");
 	try {
 		await BanksModel.create({
 			name: req.body.name,
@@ -28,7 +28,7 @@ exports.addBank = catchAsync(async (req, res, next) => {
 	}
 });
 exports.deleteBank = catchAsync(async (req, res, next) => {
-	const BanksModel = getModel(req.headers["x-year"], "bank");
+	const BanksModel = getModel(req.year, "bank");
 	try {
 		await BanksModel.destroy({
 			where: { id: req.params.id },
@@ -42,7 +42,7 @@ exports.deleteBank = catchAsync(async (req, res, next) => {
 });
 
 exports.updateBank = catchAsync(async (req, res, next) => {
-	const BanksModel = getModel(req.headers["x-year"], "bank");
+	const BanksModel = getModel(req.year, "bank");
 	try {
 		await BanksModel.update(
 			{ name: req.body.name },

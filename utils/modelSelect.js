@@ -1,6 +1,9 @@
 // modelSelector.js
 
-const { sequelizeStations } = require("../connection");
+const {
+	sequelizeStations2025,
+	sequelizeStations2026,
+} = require("../connection");
 const defineStationModel = require("../models/stationModel");
 const defineShiftModel = require("../models/shiftModel");
 const defineStoreModel = require("../models/storeModel");
@@ -48,6 +51,9 @@ const defineAnnualStocktakingCashModel = require("../models/annualStocktakingCas
 const defineAnnualStocktakingTankModel = require("../models/annualStocktakingTankModel");
 const defineAnnualStocktakingModel = require("../models/annualStocktakingModel");
 const defineAnnualStocktakingSurplusDeficitModel = require("../models/annualStocktakingsSurplusDeficitModel");
+const defineQuantityDeductionMemberModel = require("../models/quantityDeductionMemberModel");
+const defineFinancialOperationsModel = require("../models/financialOperationsModel");
+const defineSessionModel = require("../models/sessionModel");
 function initModels(sequelize) {
 	const BankModel = defineBankModel(sequelize);
 	const DeviceModel = defineDeviceModel(sequelize);
@@ -109,7 +115,7 @@ function initModels(sequelize) {
 		sequelize,
 		{
 			StoreModel,
-		}
+		},
 	);
 	const StoreMovmentModel = defineStoreMovmentModel(sequelize, {
 		StoreModel,
@@ -200,26 +206,37 @@ function initModels(sequelize) {
 	});
 	const AnnualStocktakingModel = defineAnnualStocktakingModel(sequelize, {
 		StationModel,
+		MovmentModel,
+		IncomeModel,
 	});
 	const AnnualStocktakingMemberModel = defineAnnualStocktakingMemberModel(
 		sequelize,
-		{ StationModel }
+		{ StationModel },
 	);
 	const AnnualStocktakingCashModel = defineAnnualStocktakingCashModel(
 		sequelize,
-		{ StationModel }
+		{ StationModel },
 	);
 	const AnnualStocktakingTankModel = defineAnnualStocktakingTankModel(
 		sequelize,
-		{ TankModel, StationModel }
+		{ TankModel, StationModel },
 	);
 	const AnnualStocktakingSurplusDeficitModel =
 		defineAnnualStocktakingSurplusDeficitModel(sequelize, {
 			StationModel,
 			SubstanceModel,
 		});
+	const QuantityDeductionMemberModel = defineQuantityDeductionMemberModel(
+		sequelize,
+		{ StationModel },
+	);
+	const FinancialOperationsModel = defineFinancialOperationsModel(sequelize, {
+		StationModel,
+	});
+	const SessionModel = defineSessionModel(sequelize);
 	return {
 		bank: BankModel,
+		session: SessionModel,
 		device: DeviceModel,
 		station: StationModel,
 		shift: ShiftModel,
@@ -266,21 +283,19 @@ function initModels(sequelize) {
 		annual_stocktaking_cash: AnnualStocktakingCashModel,
 		annual_stocktaking_tank: AnnualStocktakingTankModel,
 		annual_stocktaking_surplus_deficit: AnnualStocktakingSurplusDeficitModel,
+		quantity_deduction_member: QuantityDeductionMemberModel,
+		financial_operations: FinancialOperationsModel,
 	};
 }
 
 const models = {
-	stations: initModels(sequelizeStations),
+	"stations-2025": initModels(sequelizeStations2025),
+	"stations-2026": initModels(sequelizeStations2026),
 };
 
 function getModel(year, modelName) {
-	const serverYear = process.env.YEAR;
-	let dbKey = null;
-	if (year === serverYear) {
-		dbKey = "stations";
-	} else {
-		dbKey = `stations-${year}`;
-	}
+	const dbKey = `stations-${year}`;
+
 	if (!models[dbKey]) {
 		throw new Error(`Database instance for year '${year}' not configured`);
 	}

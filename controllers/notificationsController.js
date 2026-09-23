@@ -7,7 +7,7 @@ const { getModel } = require("../utils/modelSelect");
 const path = require("path");
 
 exports.sendNotification = catchAsync(async (req, res, next) => {
-	const UserModel = getModel(req.headers["x-year"], "user");
+	const UserModel = getModel(req.year, "user");
 	const recipients = JSON.parse(req.body.recipients);
 
 	const users = await UserModel.findAll({

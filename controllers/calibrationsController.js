@@ -4,12 +4,9 @@ const sequelize = require("./../connection");
 const { getModel } = require("../utils/modelSelect");
 const { Sequelize, Op } = require("sequelize");
 exports.getAllCalibrations = catchAsync(async (req, res, next) => {
-	const CalibrationReportModel = getModel(
-		req.headers["x-year"],
-		"calibration_report"
-	);
-	const StationModel = getModel(req.headers["x-year"], "station");
-	const MovmentModel = getModel(req.headers["x-year"], "movment");
+	const CalibrationReportModel = getModel(req.year, "calibration_report");
+	const StationModel = getModel(req.year, "station");
+	const MovmentModel = getModel(req.year, "movment");
 
 	try {
 		const calibrations = await CalibrationReportModel.findAll({
@@ -41,13 +38,10 @@ exports.getAllCalibrations = catchAsync(async (req, res, next) => {
 
 exports.getCalibrationsByMovmentIdAndShiftId = catchAsync(
 	async (req, res, next) => {
-		const CalibrationReportModel = getModel(
-			req.headers["x-year"],
-			"calibration_report"
-		);
-		const CalibrationModel = getModel(req.headers["x-year"], "calibration");
-		const StoreModel = getModel(req.headers["x-year"], "store");
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const CalibrationReportModel = getModel(req.year, "calibration_report");
+		const CalibrationModel = getModel(req.year, "calibration");
+		const StoreModel = getModel(req.year, "store");
+		const SubstanceModel = getModel(req.year, "substance");
 
 		try {
 			const calibrationReport = await CalibrationReportModel.findOne({
@@ -89,15 +83,9 @@ exports.getCalibrationsByMovmentIdAndShiftId = catchAsync(
 );
 exports.addCalibration = catchAsync(async (req, res, next) => {
 	try {
-		const CalibrationReportModel = getModel(
-			req.headers["x-year"],
-			"calibration_report"
-		);
-		const CalibrationModel = getModel(req.headers["x-year"], "calibration");
-		const CalibrationMemberModel = getModel(
-			req.headers["x-year"],
-			"calibration_member"
-		);
+		const CalibrationReportModel = getModel(req.year, "calibration_report");
+		const CalibrationModel = getModel(req.year, "calibration");
+		const CalibrationMemberModel = getModel(req.year, "calibration_member");
 		await req.db.transaction(async (t) => {
 			const calibrationReport = await CalibrationReportModel.create(
 				{
@@ -142,10 +130,7 @@ exports.addCalibration = catchAsync(async (req, res, next) => {
 	}
 });
 exports.deleteCalibrationReport = catchAsync(async (req, res, next) => {
-	const CalibrationReportModel = getModel(
-		req.headers["x-year"],
-		"calibration_report"
-	);
+	const CalibrationReportModel = getModel(req.year, "calibration_report");
 	try {
 		await CalibrationReportModel.destroy({
 			where: { id: req.params.id },

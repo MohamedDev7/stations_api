@@ -1,0 +1,81 @@
+getFinancialBalanceReport = catchAsync(async (req, res, next) => {\r
+5524: 	try {\r
+5525: 		await req.db.transaction(async (t) => {\r
+5526: 			const StationModel = getModel(req.year, "station");\r
+5527: 			// Get all stations\r
+5528: 			const stations = await StationModel.findAll({\r
+5529: 				raw: true,\r
+5530: 				transaction: t,\r
+5531: 				order: [["number", "ASC"]],\r
+5532: 			});\r
+5533: \r
+5534: 			const results = [];\r
+5535: 			let total_debtor = 0;\r
+5536: 			let total_creditor = 0;\r
+5537: 			let total_balance_debtor = 0;\r
+5538: 			let total_balance_creditor = 0;\r
+5539: \r
+5540: 			for (const station of stations) {\r
+5541: 				const MovmentModel = getModel(req.year, "movment");\r
+5542: 				const IncomeModel = getModel(req.year, "income");\r
+5543: 				const SubstanceModel = getModel(req.year, "substance");\r
+5544: 				const StoreModel = getModel(req.year, "store");\r
+5545: 			
+<truncated 5055 bytes>
+- periodcreditor;\r
+5710: \r
+5711: 				const balance_debtor = balance < 0 ? -balance : 0;\r
+5712: 				const balance_creditor = balance > 0 ? balance : 0;\r
+5713: \r
+5714: 				const final_statment =\r
+5715: 					balance < 0\r
+5716: 						? `دائن ${tafqeet(Math.abs(balance))} ريال فقط لا غير`\r
+5717: 						: `مدين ${tafqeet(Math.abs(balance))} ريال فقط لا غير`;\r
+5718: \r
+5719: 				results.push({\r
+5720: 					station_id: station.id,\r
+5721: 					station_name: station.name,\r
+5722: 					movment_debtor: perioddebtor,\r
+5723: 					movment_creditor: periodcreditor,\r
+5724: 					balance_debtor,\r
+5725: 					balance_creditor,\r
+5726: 					final_statment,\r
+5727: 				});\r
+5728: \r
+5729: 				total_debtor += perioddebtor;\r
+5730: 				total_creditor += periodcreditor;\r
+5731: 				total_balance_debtor += balance_debtor;\r
+5732: 				total_balance_creditor += balance_creditor;\r
+5733: 			}\r
+5734: \r
+5735: 			const total_balance = total_balance_debtor - total_balance_creditor;\r
+5736: 			const total_final_statment =\r
+5737: 				total_balance < 0\r
+5738: 					? `دائن ${tafqeet(Math.abs(total_balance))} ريال فقط لا غير`\r
+5739: 					: `مدين ${tafqeet(Math.abs(total_balance))} ريال فقط لا غير`;\r
+5740: \r
+5741: 			res.status(200).json({\r
+5742: 				state: "success",\r
+5743: 				data: {\r
+5744: 					stations: results,\r
+5745: 					totals: {\r
+5746: 						total_movment_debtor: total_debtor,\r
+5747: 						total_movment_creditor: total_creditor,\r
+5748: 						total_balance_debtor,\r
+5749: 						total_balance_creditor,\r
+5750: 						total_final_statment,\r
+5751: 					},\r
+5752: 					info: {\r
+5753: 						startDate: req.query.startDate,\r
+5754: 						endDate: req.query.endDate,\r
+5755: 					},\r
+5756: 				},\r
+5757: 			});\r
+5758: 		});\r
+5759: 	} catch (error) {\r
+5760: 		return next(new AppError(error, 500));\r
+5761: 	}\r
+5762: });\r
+5763: 
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
+"}

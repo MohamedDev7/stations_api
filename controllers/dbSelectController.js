@@ -1,37 +1,32 @@
-const { sequelizeStations } = require("../connection");
-// const defineDuesListModel = require("../models/duesListModel");
-// Add other model imports and define functions similarly
+const {
+	sequelizeStations2025,
+	sequelizeStations2026,
+} = require("../connection");
 
-// Initialize models on each sequelize instance
-// const models = {
-// 	elec: {
-// 		duesList: defineDuesListModel(sequelizeElec),
-// 		// other models...
-// 	},
-// 	elec2024: {
-// 		duesList: defineDuesListModel(sequelizeElec2024),
-// 		// other models...
-// 	},
-// };
+const sequelizeStations = sequelizeStations2026; // Default for current year
 
-// Middleware to select Sequelize instance per request
-exports.selectDbMiddleware = (req, res, next) => {
-	const year = req.headers["x-year"] || req.query.year || null;
-
-	req.db = sequelizeStations;
-	next();
+// Map of year to database connection
+const dbConnections = {
+	stations: sequelizeStations,
+	"stations-2025": sequelizeStations2025,
+	"stations-2026": sequelizeStations2026,
+	// Add more years here as needed
 };
 
-// // Utility function to get model based on year and model name
-// exports.getModel = (year, modelName) => {
-// 	const dbKey = year === "2024" ? "elec2024" : "elec";
+// Middleware to read year from request and set db connection
+exports.selectDbMiddleware = (req, res, next) => {
+	// Read year from x-year header, query param, or body
+	const year =
+		req.headers["x-year"] || req.query.year || req.body?.year || null;
+	req.year = year;
 
-// 	if (!models[dbKey]) {
-// 		throw new Error(`Database instance for year '${year}' not configured`);
-// 	}
-// 	if (!models[dbKey][modelName]) {
-// 		throw new Error(`Model '${modelName}' not found for database '${dbKey}'`);
-// 	}
+	// Set db connection based on year
+	const serverYear = process.env.YEAR;
+	if (year && year !== serverYear) {
+		req.db = dbConnections[`stations-${year}`] || sequelizeStations;
+	} else {
+		req.db = sequelizeStations;
+	}
 
-// 	return models[dbKey][modelName];
-// };
+	next();
+};

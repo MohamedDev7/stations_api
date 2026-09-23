@@ -7,9 +7,9 @@ const { Op, Sequelize } = require("sequelize");
 
 exports.getAllSubstances = catchAsync(async (req, res, next) => {
 	try {
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const SubstanceModel = getModel(req.year, "substance");
 		const SubstancePriceMovmentModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"substance_price_movment"
 		);
 		await req.db.transaction(async (t) => {
@@ -36,7 +36,7 @@ exports.getSubstancesPricesByDate = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
 			const SubstancePriceMovmentModel = getModel(
-				req.headers["x-year"],
+				req.year,
 				"substance_price_movment"
 			);
 			const prices = await SubstancePriceMovmentModel.findAll({
@@ -72,9 +72,9 @@ exports.getSubstancesPricesByDate = catchAsync(async (req, res, next) => {
 });
 exports.getSubstance = catchAsync(async (req, res, next) => {
 	try {
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const SubstanceModel = getModel(req.year, "substance");
 		const SubstancePriceMovmentModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"substance_price_movment"
 		);
 		const lastPriceNumber = await SubstancePriceMovmentModel.max("number", {
@@ -99,12 +99,9 @@ exports.getSubstance = catchAsync(async (req, res, next) => {
 exports.getSubstancesStocksByMovmentIdAndShiftID = catchAsync(
 	async (req, res, next) => {
 		try {
-			const StoreMovmentModel = getModel(
-				req.headers["x-year"],
-				"store_movment"
-			);
-			const StoreModel = getModel(req.headers["x-year"], "store");
-			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const StoreMovmentModel = getModel(req.year, "store_movment");
+			const StoreModel = getModel(req.year, "store");
+			const SubstanceModel = getModel(req.year, "substance");
 			const stocks = await StoreMovmentModel.findAll({
 				where: {
 					movment_id: req.query.movmentId,
@@ -140,9 +137,9 @@ exports.getSubstancesStocksByMovmentIdAndShiftID = catchAsync(
 exports.addSubstance = catchAsync(async (req, res, next) => {
 	try {
 		await req.db.transaction(async (t) => {
-			const SubstanceModel = getModel(req.headers["x-year"], "substance");
+			const SubstanceModel = getModel(req.year, "substance");
 			const SubstancePriceMovmentModel = getModel(
-				req.headers["x-year"],
+				req.year,
 				"substance_price_movment"
 			);
 			const substance = await SubstanceModel.create(
@@ -176,7 +173,7 @@ exports.addSubstance = catchAsync(async (req, res, next) => {
 });
 exports.deleteSubstance = catchAsync(async (req, res, next) => {
 	try {
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const SubstanceModel = getModel(req.year, "substance");
 		await SubstanceModel.destroy({
 			where: { id: req.params.id },
 		});
@@ -189,7 +186,7 @@ exports.deleteSubstance = catchAsync(async (req, res, next) => {
 });
 exports.updateSubstance = catchAsync(async (req, res, next) => {
 	try {
-		const SubstanceModel = getModel(req.headers["x-year"], "substance");
+		const SubstanceModel = getModel(req.year, "substance");
 		await SubstanceModel.update(
 			{ name: req.body.name },
 			{
@@ -205,7 +202,7 @@ exports.updateSubstance = catchAsync(async (req, res, next) => {
 });
 exports.updateSubstancePrice = catchAsync(async (req, res, next) => {
 	const SubstancePriceMovmentModel = getModel(
-		req.headers["x-year"],
+		req.year,
 		"substance_price_movment"
 	);
 
@@ -252,7 +249,7 @@ exports.updateSubstancePrice = catchAsync(async (req, res, next) => {
 exports.getSubstancePriceMovment = catchAsync(async (req, res, next) => {
 	try {
 		const SubstancePriceMovmentModel = getModel(
-			req.headers["x-year"],
+			req.year,
 			"substance_price_movment"
 		);
 		const currDate = new Date(req.query.date);

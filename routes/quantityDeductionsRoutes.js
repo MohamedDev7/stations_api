@@ -8,5 +8,10 @@ router
 	.get(quantityDeductionsController.getAllQuantityDeductions);
 router
 	.route("/:id")
+	.get(quantityDeductionsController.getQuantityDeductionById)
+	.patch(quantityDeductionsController.editQuantityDeductions)
 	.delete(quantityDeductionsController.deleteQuantityDeductions);
+router
+	.route("/:id/state")
+	.patch(quantityDeductionsController.changeQuantityDeductionState);
 module.exports = router;

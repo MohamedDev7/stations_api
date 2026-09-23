@@ -3,14 +3,13 @@ const catchAsync = require("../utils/catchAsync");
 const bcrypt = require("bcryptjs");
 const { getModel } = require("../utils/modelSelect");
 const { Op } = require("sequelize");
-const sequelize = require("./../connection");
-
 const notificationQueue = require("../queues/notificationQueue");
 const crypto = require("crypto");
 
 exports.getAllUsers = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
+		const year = req.year || process.env.YEAR;
+		const UserModel = getModel(year, "user");
 
 		// Fetch users from the database
 		const users = await UserModel.findAll({
@@ -33,9 +32,12 @@ exports.getAllUsers = catchAsync(async (req, res, next) => {
 });
 exports.getUser = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
-		const PermissionModel = getModel(req.headers["x-year"], "permission");
-		const UserStationModel = getModel(req.headers["x-year"], "user_station");
+		const year = req.year || process.env.YEAR;
+		const UserModel = getModel(year, "user");
+		const PermissionModel = getModel(year, "permission");
+		const UserStationModel = getModel(year, "user_station");
+		const DeviceModel = getModel(year, "device");
+		const SessionModel = getModel(year, "session");
 		const userId = req.params.id;
 
 		// Fetch user details from the UserModel
@@ -43,25 +45,57 @@ exports.getUser = catchAsync(async (req, res, next) => {
 			where: { id: userId },
 			attributes: ["id", "username", "first_name", "last_name", "phone"],
 		});
-
 		if (!user) {
 			return next(new AppError("User not found", 404));
 		}
-
 		// Fetch permissions for the user from the PermissionModel
 		const permissions = await PermissionModel.findAll({
 			where: { user_id: userId },
 		});
-		// Fetch permissions for the user from the PermissionModel
+		// Fetch stations for the user from the UserStationModel
 		const stations = await UserStationModel.findAll({
 			where: { user_id: userId },
 		});
+
+		// Fetch all sessions for the user
+		const sessions = await SessionModel.findAll({
+			where: {
+				user_id: userId,
+			},
+			attributes: ["sid", "device_id", "created_at"],
+		});
+
+		// Get device details and combine with session data
+		const deviceIds = sessions
+			.map((session) => session.device_id)
+			.filter(Boolean);
+		const deviceRecords = await DeviceModel.findAll({
+			where: {
+				device_id: deviceIds,
+			},
+			attributes: ["device_id", "title"],
+		});
+
+		// Create a map for quick device lookup
+		const deviceMap = {};
+		deviceRecords.forEach((device) => {
+			deviceMap[device.device_id] = device.title;
+		});
+
+		// Build devices array with session info
+		const devices = sessions.map((session) => ({
+			device_id: session.device_id,
+			title: deviceMap[session.device_id] || "Unknown Device",
+			session_id: session.sid,
+			created_at: session.created_at,
+		}));
 
 		res.status(200).json({
 			status: "success",
 			user,
 			permissions,
 			stations,
+			devices,
 		});
 	} catch (error) {
 		// Handle any errors that occur during the user fetching process
@@ -70,7 +104,7 @@ exports.getUser = catchAsync(async (req, res, next) => {
 });
 exports.getUsername = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
+		const UserModel = getModel(req.year, "user");
 		const userId = req.params.id;
 
 		// Fetch the username of the user from the UserModel
@@ -94,9 +128,9 @@ exports.getUsername = catchAsync(async (req, res, next) => {
 });
 exports.addUser = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
-		const PermissionModel = getModel(req.headers["x-year"], "permission");
-		const UserStationModel = getModel(req.headers["x-year"], "user_station");
+		const UserModel = getModel(req.year, "user");
+		const PermissionModel = getModel(req.year, "permission");
+		const UserStationModel = getModel(req.year, "user_station");
 		// Check if the username already exists
 		const existingUser = await UserModel.findOne({
 			where: { username: req.body.username },
@@ -151,7 +185,7 @@ exports.addUser = catchAsync(async (req, res, next) => {
 });
 exports.deleteUser = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
+		const UserModel = getModel(req.year, "user");
 
 		if (req.params.id === "1") {
 			return next(new AppError("لايمكن حذف هذا المستخدم", 500));
@@ -175,9 +209,9 @@ exports.deleteUser = catchAsync(async (req, res, next) => {
 
 exports.updateUser = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
-		const PermissionModel = getModel(req.headers["x-year"], "permission");
-		const UserStationModel = getModel(req.headers["x-year"], "user_station");
+		const UserModel = getModel(req.year, "user");
+		const PermissionModel = getModel(req.year, "permission");
+		const UserStationModel = getModel(req.year, "user_station");
 		await req.db.transaction(async (t) => {
 			await UserModel.update(
 				{
@@ -273,7 +307,7 @@ exports.updateUser = catchAsync(async (req, res, next) => {
 });
 exports.changePassword = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
+		const UserModel = getModel(req.year, "user");
 
 		const userId = req.user.id;
 		const { old, password } = req.body;
@@ -307,7 +341,7 @@ exports.changePassword = catchAsync(async (req, res, next) => {
 });
 exports.changePasswordByAdmin = catchAsync(async (req, res, next) => {
 	try {
-		const UserModel = getModel(req.headers["x-year"], "user");
+		const UserModel = getModel(req.year, "user");
 		const userId = req.params.id;
 		const randomPassword = crypto.randomBytes(4).toString("hex");
 		const salt = bcrypt.genSaltSync(10);
