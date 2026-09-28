@@ -5,7 +5,7 @@ module.exports = {
 			script: "index.js",
 			env: {
 				NODE_ENV: "production",
-				PORT: 8060,
+				PORT: 3001,
 				APP_VERSION: "2.1.0",
 				JWT_SECRET: "this-is-my-secret-jwt-word-بالعربي",
 				JWT_EXPIRES_IN: "3d",

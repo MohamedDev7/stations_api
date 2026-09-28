@@ -76,8 +76,8 @@ const path = require("path");
 		},
 		{
 			connection: {
-				host: "127.0.0.1",
-				port: 6379,
+				host: process.env.REDIS_HOST || "127.0.0.1",
+				port: process.env.REDIS_PORT || 6379,
 			},
 			backoff: {
 				type: "exponential",
@@ -85,6 +85,10 @@ const path = require("path");
 			},
 		}
 	);
+
+	worker.on("error", (err) => {
+		console.error("❌ Worker Redis error:", err.message);
+	});
 
 	worker.on("completed", (job) => {
 		console.log(`✅ Job ${job.id} completed`);

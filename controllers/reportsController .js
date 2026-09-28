@@ -2614,7 +2614,6 @@ exports.getStationAccountStatementReport = catchAsync(
 						},
 					},
 					attributes: [
-						"id",
 						"station_id",
 						[req.db.literal("SUM(price * amount)"), "debtor"],
 						[req.db.literal(0), "creditor"],

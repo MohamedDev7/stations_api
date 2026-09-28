@@ -3,8 +3,8 @@ const { Queue } = require("bullmq");
 
 const notificationQueue = new Queue("stations-notification", {
 	connection: {
-		host: "127.0.0.1",
-		port: 6379,
+		host: process.env.REDIS_HOST || "127.0.0.1",
+		port: process.env.REDIS_PORT || 6379,
 		maxRetriesPerRequest: null, // ✅ ضروري أيضًا هنا
 	},
 });

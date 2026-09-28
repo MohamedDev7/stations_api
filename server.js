@@ -1,7 +1,7 @@
 const dotenv = require("dotenv");
 dotenv.config({ path: "./config.env" });
 const app = require("./app");
-const port = process.env.PORT;
+const port = process.env.PORT || 3001;
 const fs = require("fs");
 
 app.listen(port, () => {
@@ -58,8 +58,8 @@ const {
 			},
 			{
 				connection: {
-					host: "127.0.0.1",
-					port: 6379,
+					host: process.env.REDIS_HOST || "127.0.0.1",
+					port: process.env.REDIS_PORT || 6379,
 				},
 				backoff: {
 					type: "exponential",
@@ -67,6 +67,9 @@ const {
 				},
 			},
 		);
+		worker.on("error", (err) => {
+			console.error("❌ Worker Redis error:", err.message);
+		});
 		worker.on("failed", (job, err) => {
 			console.error(`❌ Job ${job.id} failed:`, err);
 		});
