@@ -2618,7 +2618,17 @@ exports.getStationAccountStatementReport = catchAsync(
 						[req.db.literal("SUM(price * amount)"), "debtor"],
 						[req.db.literal(0), "creditor"],
 					],
-					group: ["station_id"],
+					include: [
+						{
+							model: StoreModel,
+							attributes: [],
+							where: {
+								type: "نقدي",
+							},
+							required: true,
+						},
+					],
+					group: ["surplus.station_id"],
 					transaction: t,
 					raw: true,
 				});
@@ -2747,7 +2757,17 @@ exports.getStationAccountStatementReport = catchAsync(
 							[req.db.literal("SUM(amount)"), "creditor"],
 							[req.db.literal(0), "debtor"],
 						],
-						group: ["station_id"],
+						include: [
+							{
+								model: StoreModel,
+								attributes: [],
+								where: {
+									type: "نقدي",
+								},
+								required: true,
+							},
+						],
+						group: ["credit_sales_settlements.station_id"],
 						transaction: t,
 						raw: true,
 					});
@@ -2808,40 +2828,45 @@ exports.getStationAccountStatementReport = catchAsync(
 						[req.db.literal("SUM(amount*price)"), "total_creditor"],
 						[req.db.literal(0), "total_debtor"],
 					],
-					group: ["station_id"],
+					include: [
+						{
+							model: StoreModel,
+							attributes: [],
+							where: {
+								type: "نقدي",
+							},
+							required: true,
+						},
+					],
+					group: ["quantity_deduction.station_id"],
 					transaction: t,
 					raw: true,
 				});
 
 				//حساب الرصيد الافتتاحي
+				const openingDebtor =
+					(+prevIncomes[0]?.debtor || 0) +
+					+prevOpeningBalance +
+					(+prevSurplus[0]?.debtor || 0) +
+					(+prevQuantityDeduction[0]?.total_debtor || 0) +
+					(+prevFinancialOperations[0]?.debtor || 0) +
+					(+prevPriceMovmentEntries[0]?.total_debtor || 0);
+
+				const openingCreditor =
+					(+prevDeposits[0]?.creditor || 0) +
+					(+prevCreditSalesSettlements[0]?.creditor || 0) +
+					(+prevQuantityDeduction[0]?.total_creditor || 0) +
+					(+prevFinancialOperations[0]?.creditor || 0) +
+					(+prevPriceMovmentEntries[0]?.total_creditor || 0);
+
 				const opening = [
 					{
 						date: previousDay,
 						id: "-",
 						statement: "رصيد سابق",
-						debtor:
-							(+prevIncomes[0]?.debtor || 0) +
-							+prevOpeningBalance +
-							(+prevSurplus[0]?.debtor || 0) +
-							(+prevQuantityDeduction[0]?.total_debtor || 0) +
-							(+prevFinancialOperations[0]?.debtor || 0) +
-							(+prevPriceMovmentEntries[0]?.total_debtor || 0),
-						creditor:
-							(+prevDeposits[0]?.creditor || 0) +
-							(+prevCreditSalesSettlements[0]?.creditor || 0) +
-							(+prevQuantityDeduction[0]?.total_creditor || 0) +
-							(+prevFinancialOperations[0]?.creditor || 0) +
-							(+prevPriceMovmentEntries[0]?.total_creditor || 0),
-						balance:
-							(+prevIncomes[0]?.debtor || 0) +
-							+prevOpeningBalance +
-							(+prevSurplus[0]?.debtor || 0) -
-							(+prevDeposits[0]?.creditor || 0) -
-							(+prevQuantityDeduction[0]?.total_creditor || 0) +
-							(+prevPriceMovmentEntries[0]?.total_debtor || 0) -
-							(+prevCreditSalesSettlements[0]?.creditor || 0) -
-							(+prevFinancialOperations[0]?.creditor || 0) -
-							(+prevPriceMovmentEntries[0]?.total_creditor || 0),
+						debtor: openingDebtor,
+						creditor: openingCreditor,
+						balance: openingDebtor - openingCreditor,
 					},
 				];
 
@@ -5599,9 +5624,9 @@ exports.getFinancialBalanceReport = catchAsync(async (req, res, next) => {
 			currentMovmentsIds.length ? IncomeModel.findAll({ attributes: ["station_id", "amount", "price"], where: { movment_id: { [Op.in]: currentMovmentsIds }, type: { [Op.in]: ["income", "initial"] } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }) : [],
 			currentMovmentsIds.length ? SurplusModel.findAll({ attributes: ["station_id", "amount", "price"], where: { is_annual_stocktaking: 0, movment_id: { [Op.in]: currentMovmentsIds } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }) : [],
 			DepositModel.findAll({ attributes: ["station_id", "amount"], where: { invoice_date: { [Op.between]: [startDate, endDate] } }, raw: true }),
-			CreditSaleSettlementModel.findAll({ attributes: ["station_id", "amount"], where: { date: { [Op.between]: [startDate, endDate] }, type: "قيد مالي" }, raw: true }),
-			priceMovmentEntriesModel.findAll({ attributes: ["station_id", "debtor", "creditor"], where: { date: { [Op.between]: [startDate, endDate] } }, raw: true }),
-			QuantityDeductionModel.findAll({ attributes: ["station_id", "amount", "price"], where: { date: { [Op.between]: [startDate, endDate] }, with_value: { [Op.ne]: 0 } }, raw: true })
+			CreditSaleSettlementModel.findAll({ attributes: ["station_id", "amount"], where: { date: { [Op.between]: [startDate, endDate] }, type: "قيد مالي" }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }),
+			priceMovmentEntriesModel.findAll({ attributes: ["station_id", "debtor", "creditor"], where: { date: { [Op.between]: [startDate, endDate] } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }),
+			QuantityDeductionModel.findAll({ attributes: ["station_id", "amount", "price"], where: { date: { [Op.between]: [startDate, endDate] }, with_value: { [Op.ne]: 0 } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true })
 		]);
 
 		// --- 3. Bulk Fetch Past Period (Opening Balance) ---
@@ -5618,9 +5643,9 @@ exports.getFinancialBalanceReport = catchAsync(async (req, res, next) => {
 			pastMovmentsIds.length ? IncomeModel.findAll({ attributes: ["station_id", "amount", "price"], where: { movment_id: { [Op.in]: pastMovmentsIds }, type: { [Op.in]: ["income", "initial"] } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }) : [],
 			pastMovmentsIds.length ? SurplusModel.findAll({ attributes: ["station_id", "amount", "price"], where: { is_annual_stocktaking: 0, movment_id: { [Op.in]: pastMovmentsIds } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }) : [],
 			DepositModel.findAll({ attributes: ["station_id", "amount"], where: { invoice_date: { [Op.lt]: startDate } }, raw: true }),
-			CreditSaleSettlementModel.findAll({ attributes: ["station_id", "amount"], where: { date: { [Op.lt]: startDate }, type: "قيد مالي" }, raw: true }),
-			priceMovmentEntriesModel.findAll({ attributes: ["station_id", "debtor", "creditor"], where: { date: { [Op.lt]: startDate } }, raw: true }),
-			QuantityDeductionModel.findAll({ attributes: ["station_id", "amount", "price"], where: { date: { [Op.lt]: startDate }, with_value: { [Op.ne]: 0 } }, raw: true })
+			CreditSaleSettlementModel.findAll({ attributes: ["station_id", "amount"], where: { date: { [Op.lt]: startDate }, type: "قيد مالي" }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }),
+			priceMovmentEntriesModel.findAll({ attributes: ["station_id", "debtor", "creditor"], where: { date: { [Op.lt]: startDate } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true }),
+			QuantityDeductionModel.findAll({ attributes: ["station_id", "amount", "price"], where: { date: { [Op.lt]: startDate }, with_value: { [Op.ne]: 0 } }, include: [{ model: StoreModel, attributes: [], where: { type: "نقدي" } }], raw: true })
 		]);
 
 		// Helper function to group data by station_id

@@ -4,51 +4,26 @@ const sequelize = require("./connection");
 
 async function search() {
 	try {
-        const req = { year: "2026" };
-        const StationModel = getModel(req.year, "station");
-		const MovmentModel = getModel(req.year, "movment");
-		const IncomeModel = getModel(req.year, "income");
-		const SubstanceModel = getModel(req.year, "substance");
-		const StoreModel = getModel(req.year, "store");
-		const SurplusModel = getModel(req.year, "surplus");
-		const priceMovmentEntriesModel = getModel(req.year, "price_movment_entries");
-		const DepositModel = getModel(req.year, "deposit");
-		const FinancialOperationsModel = getModel(req.year, "financial_operations");
-		const CreditSaleSettlementModel = getModel(req.year, "credit_sale_settlement");
-		const QuantityDeductionModel = getModel(req.year, "quantity_deduction");
-        const CalibrationModel = getModel(req.year, "calibration");
-        const OtherModel = getModel(req.year, "other");
-        const CreditSaleModel = getModel(req.year, "credit_sale");
-
-        const target = 12972100;
-        const stationId = 7; 
-
-        // Let's just fetch everything for station 7 and see if any combination or single record equals 12972100
-
-        const checkSum = async (Model, name, dateField) => {
-            let where = {};
-            if (dateField) where[dateField] = { [Op.lt]: '2026/02/01' };
+        const db = sequelize.sequelizeStations2026;
+        const [tables] = await db.query('SHOW TABLES');
+        for (const t of tables) {
+            const tbl = Object.values(t)[0];
             try {
-                const records = await Model.findAll({ where, raw: true });
-                let sum = 0;
-                let myRecs = [];
-                for(let r of records) {
-                    if (r.station_id === stationId) {
-                        myRecs.push(r);
-                        if (r.amount !== undefined && r.price !== undefined) sum += r.amount * r.price;
-                        else if (r.amount !== undefined) sum += r.amount;
-                        else if (r.debtor !== undefined) sum += +r.debtor;
-                    } else if (r.movment_id && !r.station_id) { // maybe station_id is through movment?
-                        // let's skip for now
-                    }
+                const [cols] = await db.query('SHOW COLUMNS FROM `' + tbl + '`');
+                const colNames = cols.map(c => '`' + c.Field + '`').join(',');
+                const [rows] = await db.query('SELECT * FROM `' + tbl + '` WHERE CONCAT_WS(" ", ' + colNames + ') LIKE "%55504%"');
+                if (rows.length > 0) {
+                    console.log('Found in', tbl, rows);
                 }
-                console.log(name, "Sum:", sum, "Count:", myRecs.length);
             } catch(e) {}
         }
 
-        await checkSum(CalibrationModel, "Calibration", "date");
-        await checkSum(OtherModel, "Other", "date");
-        await checkSum(CreditSaleModel, "CreditSale", null);
+        // Also check if any sum of deposits = 55504300
+        const [deps] = await db.query('SELECT * FROM deposits WHERE station_id = 7');
+        console.log('Total deposits for station 7:', deps.length);
+        // Check subsets of deposits in month 9:
+        const [septDeps] = await db.query('SELECT * FROM deposits WHERE station_id = 7 AND invoice_date BETWEEN "2026-09-01" AND "2026-09-30"');
+        console.log('Sept deps count:', septDeps.length, 'Sum:', septDeps.reduce((s, d) => s + +d.amount, 0));
 
 	} catch (e) {
 		console.error(e);
